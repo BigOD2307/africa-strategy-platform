@@ -1,0 +1,76 @@
+# Africa Strategy - Configuration Docker
+
+version: '3.8'
+
+services:
+  # Base de données PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: africa_strategy_postgres
+    environment:
+      POSTGRES_DB: africa_strategy
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - africa_strategy_network
+
+  # Cache Redis
+  redis:
+    image: redis:7-alpine
+    container_name: africa_strategy_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - africa_strategy_network
+
+  # Backend FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: africa_strategy_backend
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/africa_strategy
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    networks:
+      - africa_strategy_network
+
+  # Frontend Next.js
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: africa_strategy_frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - africa_strategy_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  africa_strategy_network:
+    driver: bridge
