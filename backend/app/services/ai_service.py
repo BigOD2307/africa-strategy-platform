@@ -1,109 +1,56 @@
-"""
-AI Service for Africa Strategy
-Handles OpenRouter API integration with Gemini 2.5 Flash and Perplexity
-"""
-import json
-import asyncio
-from typing import Dict, List, Optional, Any
-from datetime import datetime
-
-import httpx
-from langchain.schema import BaseMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-
-from ..core.config import settings
-from ..core.logging import get_logger
-
-logger = get_logger(__name__)
-
-
-class AIService:
-    """Service for AI-powered business analysis using OpenRouter"""
-
-    def __init__(self):
-        self.openrouter_api_key = settings.OPENROUTER_API_KEY
-        self.base_url = settings.OPENROUTER_BASE_URL
-
-        # Initialize Gemini 2.5 Flash for analysis
-        self.gemini_llm = ChatOpenAI(
-            model=settings.GEMINI_MODEL,
-            openai_api_key=self.openrouter_api_key,
-            openai_api_base=self.base_url,
-            temperature=0.1,
-            max_tokens=4000
-        )
-
-        # Initialize Perplexity for internet search
-        self.perplexity_llm = ChatOpenAI(
-            model=settings.PERPLEXITY_MODEL,
-            openai_api_key=self.openrouter_api_key,
-            openai_api_base=self.base_url,
-            temperature=0.1,
-            max_tokens=3000
-        )
-
-        logger.info("AI Service initialized with OpenRouter")
-
-    async def analyze_pestel(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze_market_competition(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze PESTEL factors for a company using Gemini + Perplexity
+        Analyze market and competition for a company
 
         Args:
-            company_data: Company information from questionnaire
+            company_data: Company information
 
         Returns:
-            PESTEL analysis with scores and recommendations
+            Market and competition analysis
         """
         try:
-            # 1. Get current market data using Perplexity
-            market_context = await self._get_market_context(company_data)
+            # Get market data using Perplexity
+            market_context = await self._get_market_competition_data(company_data)
 
-            # 2. Generate PESTEL analysis with Gemini
-            pestel_analysis = await self._generate_pestel_analysis(
+            # Generate competition analysis
+            competition_analysis = await self._generate_market_competition_analysis(
                 company_data, market_context
             )
-
-            # 3. Calculate overall score
-            overall_score = self._calculate_pestel_score(pestel_analysis)
 
             return {
                 "company_name": company_data.get("company_name", "Entreprise"),
                 "sector": company_data.get("sector", ""),
                 "country": company_data.get("country", ""),
                 "analysis_date": datetime.now().isoformat(),
-                "pestel": pestel_analysis,
-                "overall_score": overall_score,
-                "recommendations": self._generate_pestel_recommendations(pestel_analysis),
+                "market_size": competition_analysis.get("market_size", {}),
+                "competition_analysis": competition_analysis.get("competition", {}),
+                "market_trends": competition_analysis.get("trends", []),
+                "opportunities": competition_analysis.get("opportunities", []),
+                "threats": competition_analysis.get("threats", []),
                 "market_context": market_context
             }
 
         except Exception as e:
-            logger.error(f"Error in PESTEL analysis: {str(e)}")
+            logger.error(f"Error in market competition analysis: {str(e)}")
             raise
 
-    async def analyze_esg(self, company_data: Dict[str, Any], esg_responses: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze_value_chain(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze ESG factors for a company
+        Analyze value chain for a company
 
         Args:
             company_data: Company information
-            esg_responses: ESG questionnaire responses
 
         Returns:
-            ESG analysis with scores and recommendations
+            Value chain analysis
         """
         try:
-            # 1. Get ESG context and best practices
-            esg_context = await self._get_esg_context(company_data)
+            # Get value chain context
+            value_chain_context = await self._get_value_chain_context(company_data)
 
-            # 2. Calculate ESG scores from responses
-            esg_scores = self._calculate_esg_scores(esg_responses)
-
-            # 3. Generate detailed ESG analysis
-            esg_analysis = await self._generate_esg_analysis(
-                company_data, esg_scores, esg_context
+            # Generate value chain analysis
+            value_chain_analysis = await self._generate_value_chain_analysis(
+                company_data, value_chain_context
             )
 
             return {
@@ -111,158 +58,224 @@ class AIService:
                 "sector": company_data.get("sector", ""),
                 "country": company_data.get("country", ""),
                 "analysis_date": datetime.now().isoformat(),
-                "esg_scores": esg_scores,
-                "esg_analysis": esg_analysis,
-                "overall_score": (esg_scores["environmental"] + esg_scores["social"] + esg_scores["governance"]) / 3,
-                "recommendations": self._generate_esg_recommendations(esg_scores, esg_analysis),
-                "esg_context": esg_context
+                "primary_activities": value_chain_analysis.get("primary_activities", []),
+                "support_activities": value_chain_analysis.get("support_activities", []),
+                "value_creation_points": value_chain_analysis.get("value_creation_points", []),
+                "efficiency_opportunities": value_chain_analysis.get("efficiency_opportunities", []),
+                "competitive_advantages": value_chain_analysis.get("competitive_advantages", []),
+                "value_chain_context": value_chain_context
             }
 
         except Exception as e:
-            logger.error(f"Error in ESG analysis: {str(e)}")
+            logger.error(f"Error in value chain analysis: {str(e)}")
             raise
 
-    async def generate_roadmap(self, company_data: Dict[str, Any], analyses: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze_sustainability_impact(self, company_data: Dict[str, Any], esg_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate personalized roadmap based on analyses
+        Analyze sustainability impact and SDGs contribution
 
         Args:
             company_data: Company information
-            analyses: PESTEL and ESG analysis results
+            esg_data: ESG analysis data
 
         Returns:
-            Personalized roadmap with phases and steps
+            Sustainability impact analysis
         """
         try:
-            roadmap_prompt = f"""
-            En tant qu'expert en développement durable pour les PME africaines,
-            créez un plan d'action personnalisé (roadmap) pour cette entreprise :
+            # Get SDGs and sustainability context
+            sustainability_context = await self._get_sustainability_context(company_data)
 
-            ENTREPRISE :
-            - Nom : {company_data.get('company_name', 'Entreprise')}
-            - Secteur : {company_data.get('sector', '')}
-            - Pays : {company_data.get('country', '')}
-            - Taille : {company_data.get('size', '')}
+            # Generate sustainability impact analysis
+            impact_analysis = await self._generate_sustainability_impact_analysis(
+                company_data, esg_data, sustainability_context
+            )
 
-            ANALYSES :
-            - Score PESTEL global : {analyses.get('pestel', {}).get('overall_score', 0)}/10
-            - Score ESG global : {analyses.get('esg', {}).get('overall_score', 0)}/100
+            return {
+                "company_name": company_data.get("company_name", "Entreprise"),
+                "sector": company_data.get("sector", ""),
+                "country": company_data.get("country", ""),
+                "analysis_date": datetime.now().isoformat(),
+                "sdgs_contribution": impact_analysis.get("sdgs_contribution", []),
+                "environmental_impact": impact_analysis.get("environmental_impact", {}),
+                "social_impact": impact_analysis.get("social_impact", {}),
+                "economic_impact": impact_analysis.get("economic_impact", {}),
+                "sustainability_score": impact_analysis.get("sustainability_score", 0),
+                "impact_recommendations": impact_analysis.get("impact_recommendations", []),
+                "sustainability_context": sustainability_context
+            }
 
-            POINTS FAIBLES IDENTIFIÉS :
-            {self._extract_weaknesses(analyses)}
+        except Exception as e:
+            logger.error(f"Error in sustainability impact analysis: {str(e)}")
+            raise
 
-            Créez une roadmap avec 3 phases :
-            1. Diagnostic et Quick Wins (1-3 mois)
-            2. Transformation Structurelle (3-6 mois)
-            3. Excellence Durable (6-12 mois)
+    async def generate_integrated_synthesis(self, company_data: Dict[str, Any], all_analyses: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate integrated synthesis of all analyses
 
-            Pour chaque phase, listez 3-5 étapes concrètes avec :
-            - Titre de l'étape
-            - Description détaillée
-            - Impact sur le score de maturité
-            - Coût estimé (en FCFA)
-            - Durée estimée
-            - Ressources nécessaires
+        Args:
+            company_data: Company information
+            all_analyses: All analysis results (PESTEL, Market, Value Chain, ESG, Impact)
 
-            Format JSON uniquement.
-            """
+        Returns:
+            Integrated synthesis and strategic recommendations
+        """
+        try:
+            # Generate comprehensive synthesis
+            synthesis = await self._generate_integrated_synthesis(
+                company_data, all_analyses
+            )
 
-            response = await self.gemini_llm.ainvoke([SystemMessage(content="Vous êtes un expert en développement durable pour les PME africaines."), HumanMessage(content=roadmap_prompt)])
+            return {
+                "company_name": company_data.get("company_name", "Entreprise"),
+                "sector": company_data.get("sector", ""),
+                "country": company_data.get("country", ""),
+                "analysis_date": datetime.now().isoformat(),
+                "executive_summary": synthesis.get("executive_summary", ""),
+                "key_findings": synthesis.get("key_findings", []),
+                "strategic_recommendations": synthesis.get("strategic_recommendations", []),
+                "implementation_priorities": synthesis.get("implementation_priorities", []),
+                "risk_assessment": synthesis.get("risk_assessment", {}),
+                "growth_opportunities": synthesis.get("growth_opportunities", []),
+                "sustainability_transformation": synthesis.get("sustainability_transformation", {}),
+                "overall_score": synthesis.get("overall_score", 0),
+                "maturity_level": synthesis.get("maturity_level", ""),
+                "next_steps": synthesis.get("next_steps", [])
+            }
 
-            # Parse and structure the roadmap
-            roadmap_data = json.loads(response.content.strip())
+        except Exception as e:
+            logger.error(f"Error in integrated synthesis: {str(e)}")
+            raise
+
+    async def generate_strategic_roadmap(self, company_data: Dict[str, Any], synthesis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate strategic roadmap based on synthesis
+
+        Args:
+            company_data: Company information
+            synthesis: Integrated synthesis results
+
+        Returns:
+            Strategic roadmap with phases and actions
+        """
+        try:
+            roadmap = await self._generate_strategic_roadmap(company_data, synthesis)
 
             return {
                 "company_id": company_data.get("id", ""),
                 "generated_at": datetime.now().isoformat(),
-                "overall_score": self._calculate_overall_score(analyses),
-                "target_score": 85,  # Target score for excellence
-                "phases": roadmap_data.get("phases", []),
-                "milestones": self._generate_milestones(),
-                "estimated_completion": "12_months"
+                "overall_score": synthesis.get("overall_score", 0),
+                "target_score": 85,
+                "roadmap_title": roadmap.get("title", ""),
+                "phases": roadmap.get("phases", []),
+                "milestones": roadmap.get("milestones", []),
+                "estimated_timeline": roadmap.get("estimated_timeline", ""),
+                "total_investment": roadmap.get("total_investment", ""),
+                "expected_roi": roadmap.get("expected_roi", ""),
+                "success_metrics": roadmap.get("success_metrics", [])
             }
 
         except Exception as e:
-            logger.error(f"Error generating roadmap: {str(e)}")
+            logger.error(f"Error generating strategic roadmap: {str(e)}")
             raise
 
-    async def chat_with_ai(self, message: str, company_context: Dict[str, Any]) -> str:
+    async def chat_with_context(self, message: str, company_context: Dict[str, Any], analyses_context: Dict[str, Any]) -> str:
         """
-        Chat with AI assistant for company-specific advice
+        Enhanced chat with full context of all analyses
 
         Args:
             message: User message
-            company_context: Company information and analyses
+            company_context: Company information
+            analyses_context: All analysis results
 
         Returns:
-            AI response
+            Contextual AI response
         """
         try:
-            chat_prompt = f"""
-            Vous êtes un assistant IA spécialisé dans le développement durable des PME africaines.
+            # Create comprehensive context
+            full_context = {
+                "company": company_context,
+                "analyses": analyses_context,
+                "current_date": datetime.now().isoformat(),
+                "conversation_history": []  # Could be enhanced with actual history
+            }
 
-            CONTEXTE ENTREPRISE :
-            - Nom : {company_context.get('company_name', '')}
-            - Secteur : {company_context.get('sector', '')}
-            - Pays : {company_context.get('country', '')}
-            - Score actuel : {company_context.get('current_score', 0)}/100
+            chat_prompt = f"""
+            Tu es un assistant IA expert en stratégie d'entreprise et développement durable pour PME africaines.
+
+            CONTEXTE COMPLET DE L'ENTREPRISE :
+            - Nom : {full_context['company'].get('company_name', '')}
+            - Secteur : {full_context['company'].get('sector', '')}
+            - Pays : {full_context['company'].get('country', '')}
+            - Score global : {analyses_context.get('overall_score', 0)}/100
+
+            ANALYSES DISPONIBLES :
+            - PESTEL : {analyses_context.get('pestel', {}).get('overall_score', 'N/A')}/10
+            - ESG : {analyses_context.get('esg', {}).get('overall_score', 'N/A')}/100
+            - Marché : {len(analyses_context.get('market_competition', {}).get('opportunities', []))} opportunités identifiées
+            - Chaîne de valeur : {len(analyses_context.get('value_chain', {}).get('efficiency_opportunities', []))} opportunités d'efficacité
+            - Impact durable : {analyses_context.get('sustainability_impact', {}).get('sustainability_score', 'N/A')}/100
 
             QUESTION UTILISATEUR : {message}
 
-            Répondez de manière :
-            1. Spécifique au contexte africain
-            2. Pratique et actionnable
-            3. Encouragante et motivante
-            4. Basée sur les meilleures pratiques ESG
+            Réponds de manière :
+            1. **Contextuelle** : Utilise les données des analyses disponibles
+            2. **Actionnable** : Donne des conseils pratiques et spécifiques
+            3. **Africaine** : Considère le contexte africain et local
+            4. **Stratégique** : Lie les réponses aux objectifs de durabilité
+            5. **Mesurable** : Quand possible, suggère des KPIs ou métriques
 
-            Réponse concise mais complète.
+            Si la question nécessite des données spécifiques des analyses, fais référence aux résultats disponibles.
+            Si c'est une question générale, utilise ta connaissance générale enrichie du contexte.
             """
 
-            response = await self.gemini_llm.ainvoke([SystemMessage(content="Assistant IA pour PME africaines durables"), HumanMessage(content=chat_prompt)])
+            response = await self.gemini_llm.ainvoke([SystemMessage(content="Assistant IA stratégique pour PME africaines"), HumanMessage(content=chat_prompt)])
 
             return response.content.strip()
 
         except Exception as e:
-            logger.error(f"Error in AI chat: {str(e)}")
-            return "Désolé, je rencontre un problème technique. Veuillez réessayer."
+            logger.error(f"Error in contextual chat: {str(e)}")
+            return "Désolé, je rencontre un problème technique. Veuillez réessayer ou contacter le support."
 
-    # Private helper methods
+    # Private helper methods for new analyses
 
-    async def _get_market_context(self, company_data: Dict[str, Any]) -> str:
-        """Get current market context using Perplexity"""
+    async def _get_market_competition_data(self, company_data: Dict[str, Any]) -> str:
+        """Get market and competition data"""
         query = f"""
-        Données économiques et tendances récentes pour {company_data.get('sector', '')}
+        Analyse du marché et de la concurrence pour {company_data.get('sector', '')}
         en {company_data.get('country', '')} et Afrique de l'Ouest.
-        Focus sur : opportunités, défis, réglementations, investissements.
-        Actualités des 6 derniers mois.
+        Inclure : taille du marché, acteurs principaux, tendances,
+        opportunités de croissance, menaces concurrentielles.
+        Données récentes et projections.
         """
+        response = await self.perplexity_llm.ainvoke([HumanMessage(content=query)])
+        return response.content.strip()
 
-        try:
-            response = await self.perplexity_llm.ainvoke([HumanMessage(content=query)])
-            return response.content.strip()
-        except Exception as e:
-            logger.warning(f"Could not get market context: {str(e)}")
-            return "Contexte marché non disponible"
-
-    async def _get_esg_context(self, company_data: Dict[str, Any]) -> str:
-        """Get ESG best practices context"""
+    async def _get_value_chain_context(self, company_data: Dict[str, Any]) -> str:
+        """Get value chain context"""
         query = f"""
-        Meilleures pratiques ESG pour les entreprises {company_data.get('sector', '')}
+        Analyse de la chaîne de valeur pour le secteur {company_data.get('sector', '')}
         en Afrique, particulièrement {company_data.get('country', '')}.
-        Focus sur : certifications, standards, initiatives régionales.
+        Inclure : activités primaires, activités de support,
+        points de création de valeur, opportunités d'optimisation.
         """
+        response = await self.perplexity_llm.ainvoke([HumanMessage(content=query)])
+        return response.content.strip()
 
-        try:
-            response = await self.perplexity_llm.ainvoke([HumanMessage(content=query)])
-            return response.content.strip()
-        except Exception as e:
-            logger.warning(f"Could not get ESG context: {str(e)}")
-            return "Contexte ESG non disponible"
+    async def _get_sustainability_context(self, company_data: Dict[str, Any]) -> str:
+        """Get sustainability and SDGs context"""
+        query = f"""
+        Impact durable et contribution aux ODD pour les entreprises {company_data.get('sector', '')}
+        en {company_data.get('country', '')}.
+        Inclure : ODD pertinents, mesures d'impact, meilleures pratiques,
+        certifications disponibles, initiatives régionales.
+        """
+        response = await self.perplexity_llm.ainvoke([HumanMessage(content=query)])
+        return response.content.strip()
 
-    async def _generate_pestel_analysis(self, company_data: Dict[str, Any], market_context: str) -> Dict[str, Any]:
-        """Generate detailed PESTEL analysis"""
-        pestel_prompt = f"""
-        Analysez les facteurs PESTEL pour cette entreprise africaine :
+    async def _generate_market_competition_analysis(self, company_data: Dict[str, Any], context: str) -> Dict[str, Any]:
+        """Generate market competition analysis"""
+        prompt = f"""
+        Analyse approfondie du marché et de la concurrence :
 
         ENTREPRISE :
         - Secteur : {company_data.get('sector', '')}
@@ -270,191 +283,137 @@ class AIService:
         - Taille : {company_data.get('size', '')}
 
         CONTEXTE MARCHÉ :
-        {market_context}
+        {context}
 
-        Pour chaque facteur PESTEL (Politique, Économique, Social, Technologique, Environnemental, Légal),
-        fournissez :
-        1. Score sur 10 (0 = très défavorable, 10 = très favorable)
-        2. Analyse détaillée (2-3 phrases)
-        3. Opportunités identifiées
-        4. Menaces identifiées
-        5. Recommandations spécifiques
+        Fournis une analyse structurée avec :
+        1. Taille et croissance du marché
+        2. Analyse des concurrents (5 principaux)
+        3. Positionnement concurrentiel
+        4. Tendances du marché (3-5 ans)
+        5. Opportunités de croissance
+        6. Menaces concurrentielles
 
-        Format JSON avec structure claire.
+        Format JSON détaillé.
         """
-
-        response = await self.gemini_llm.ainvoke([SystemMessage(content="Expert en analyse stratégique PESTEL"), HumanMessage(content=pestel_prompt)])
-
+        response = await self.gemini_llm.ainvoke([SystemMessage(content="Expert en analyse de marché"), HumanMessage(content=prompt)])
         return json.loads(response.content.strip())
 
-    async def _generate_esg_analysis(self, company_data: Dict[str, Any], esg_scores: Dict[str, float], esg_context: str) -> Dict[str, Any]:
-        """Generate detailed ESG analysis"""
-        esg_prompt = f"""
-        Analysez les pratiques ESG de cette entreprise :
+    async def _generate_value_chain_analysis(self, company_data: Dict[str, Any], context: str) -> Dict[str, Any]:
+        """Generate value chain analysis"""
+        prompt = f"""
+        Analyse de la chaîne de valeur :
 
         ENTREPRISE :
         - Secteur : {company_data.get('sector', '')}
         - Pays : {company_data.get('country', '')}
-        - Scores calculés : Environnemental {esg_scores['environmental']}/100, Social {esg_scores['social']}/100, Gouvernance {esg_scores['governance']}/100
+        - Activités : {company_data.get('biens_services', [])}
 
-        CONTEXTE ESG :
-        {esg_context}
+        CONTEXTE CHAÎNE DE VALEUR :
+        {context}
 
-        Pour chaque pilier ESG, fournissez :
-        1. Évaluation détaillée des forces et faiblesses
-        2. Comparaison avec les standards sectoriels
-        3. Opportunités d'amélioration
-        4. Actions prioritaires
-        5. Indicateurs de suivi
+        Analyse structurée avec :
+        1. Activités primaires (entrant, opérations, sortant, marketing, service)
+        2. Activités de support (infrastructure, GRH, technologie, achats)
+        3. Points de création de valeur
+        4. Opportunités d'efficacité et d'optimisation
+        5. Avantages concurrentiels potentiels
 
-        Format JSON structuré.
+        Format JSON détaillé.
         """
-
-        response = await self.gemini_llm.ainvoke([SystemMessage(content="Expert en analyse ESG"), HumanMessage(content=esg_prompt)])
-
+        response = await self.gemini_llm.ainvoke([SystemMessage(content="Expert en analyse de chaîne de valeur"), HumanMessage(content=prompt)])
         return json.loads(response.content.strip())
 
-    def _calculate_pestel_score(self, pestel_analysis: Dict[str, Any]) -> float:
-        """Calculate overall PESTEL score"""
-        factors = ['politique', 'economique', 'social', 'technologique', 'environnemental', 'legal']
-        total_score = 0
+    async def _generate_sustainability_impact_analysis(self, company_data: Dict[str, Any], esg_data: Dict[str, Any], context: str) -> Dict[str, Any]:
+        """Generate sustainability impact analysis"""
+        prompt = f"""
+        Analyse de l'impact durable et contribution aux ODD :
 
-        for factor in factors:
-            if factor in pestel_analysis and 'score' in pestel_analysis[factor]:
-                total_score += pestel_analysis[factor]['score']
+        ENTREPRISE :
+        - Secteur : {company_data.get('sector', '')}
+        - Pays : {company_data.get('country', '')}
+        - ODD ciblés : {company_data.get('objectifs_dd', [])}
+        - Scores ESG : {esg_data.get('esg_scores', {})}
 
-        return round(total_score / len(factors), 1)
+        CONTEXTE DURABILITÉ :
+        {context}
 
-    def _calculate_esg_scores(self, esg_responses: Dict[str, Any]) -> Dict[str, float]:
-        """Calculate ESG scores from questionnaire responses"""
-        # This is a simplified scoring logic - can be enhanced
-        environmental_score = self._score_environmental_responses(esg_responses)
-        social_score = self._score_social_responses(esg_responses)
-        governance_score = self._score_governance_responses(esg_responses)
+        Analyse complète avec :
+        1. Contribution aux ODD (mesure et impact)
+        2. Impact environnemental (émissions, ressources, biodiversité)
+        3. Impact social (emploi, communauté, droits humains)
+        4. Impact économique (création de valeur, inclusion)
+        5. Score de durabilité global (0-100)
+        6. Recommandations d'amélioration d'impact
 
-        return {
-            "environmental": environmental_score,
-            "social": social_score,
-            "governance": governance_score
-        }
+        Format JSON détaillé.
+        """
+        response = await self.gemini_llm.ainvoke([SystemMessage(content="Expert en impact durable et ODD"), HumanMessage(content=prompt)])
+        return json.loads(response.content.strip())
 
-    def _score_environmental_responses(self, responses: Dict[str, Any]) -> float:
-        """Score environmental responses"""
-        # Simplified scoring - can be made more sophisticated
-        score = 50  # Base score
+    async def _generate_integrated_synthesis(self, company_data: Dict[str, Any], all_analyses: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate integrated synthesis of all analyses"""
+        prompt = f"""
+        SYNTHÈSE INTÉGRALE DE TOUTES LES ANALYSES
 
-        # Add points for positive environmental practices
-        if responses.get('energy_consumption') == 'yes_detailed':
-            score += 20
-        elif responses.get('energy_consumption') == 'yes_basic':
-            score += 10
+        ENTREPRISE :
+        - Nom : {company_data.get('company_name', '')}
+        - Secteur : {company_data.get('sector', '')}
+        - Pays : {company_data.get('country', '')}
 
-        if responses.get('waste_management') == 'recycling_program':
-            score += 20
-        elif responses.get('waste_management') == 'basic_separation':
-            score += 10
+        RÉSULTATS DES ANALYSES :
+        - PESTEL : {all_analyses.get('pestel', {})}
+        - Marché & Concurrence : {all_analyses.get('market_competition', {})}
+        - Chaîne de valeur : {all_analyses.get('value_chain', {})}
+        - ESG : {all_analyses.get('esg', {})}
+        - Impact Durable : {all_analyses.get('sustainability_impact', {})}
 
-        return min(100, max(0, score))
+        Génère une synthèse exécutive intégrant tous ces éléments :
 
-    def _score_social_responses(self, responses: Dict[str, Any]) -> float:
-        """Score social responses"""
-        score = 50  # Base score
+        1. Résumé exécutif (3-4 paragraphes)
+        2. Principales conclusions (5-7 points clés)
+        3. Recommandations stratégiques prioritaires
+        4. Priorités d'implémentation (court/moyen/long terme)
+        5. Évaluation des risques
+        6. Opportunités de croissance
+        7. Plan de transformation durable
+        8. Score global consolidé
+        9. Niveau de maturité
+        10. Prochaines étapes concrètes
 
-        if responses.get('employee_training') == 'regular_training':
-            score += 25
-        elif responses.get('employee_training') == 'occasional':
-            score += 10
+        Format JSON structuré et actionnable.
+        """
+        response = await self.gemini_llm.ainvoke([SystemMessage(content="Expert en synthèse stratégique intégrale"), HumanMessage(content=prompt)])
+        return json.loads(response.content.strip())
 
-        return min(100, max(0, score))
+    async def _generate_strategic_roadmap(self, company_data: Dict[str, Any], synthesis: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate strategic roadmap"""
+        prompt = f"""
+        ROADMAP STRATÉGIQUE PERSONNALISÉE
 
-    def _score_governance_responses(self, responses: Dict[str, Any]) -> float:
-        """Score governance responses"""
-        score = 50  # Base score
+        ENTREPRISE :
+        - Nom : {company_data.get('company_name', '')}
+        - Secteur : {company_data.get('sector', '')}
+        - Pays : {company_data.get('country', '')}
+        - Score actuel : {synthesis.get('overall_score', 0)}/100
 
-        # Add governance scoring logic here
-        # This is a placeholder for actual governance questions
+        SYNTHÈSE STRATÉGIQUE :
+        {synthesis}
 
-        return min(100, max(0, score))
+        Crée une roadmap stratégique complète avec :
 
-    def _generate_pestel_recommendations(self, pestel_analysis: Dict[str, Any]) -> List[str]:
-        """Generate prioritized recommendations from PESTEL analysis"""
-        recommendations = []
+        1. Titre de la roadmap
+        2. 4-5 phases stratégiques (6-24 mois)
+        3. Pour chaque phase :
+           - Objectifs spécifiques
+           - Actions concrètes (5-8 par phase)
+           - Jalons mesurables
+           - Ressources nécessaires
+           - Indicateurs de succès
+        4. Investissement total estimé
+        5. ROI attendu
+        6. Métriques de succès globales
 
-        for factor, data in pestel_analysis.items():
-            if data.get('score', 0) < 6:  # Below average
-                if 'recommendations' in data:
-                    recommendations.extend(data['recommendations'][:2])  # Top 2 per factor
-
-        return recommendations[:5]  # Top 5 overall
-
-    def _generate_esg_recommendations(self, esg_scores: Dict[str, float], esg_analysis: Dict[str, Any]) -> List[str]:
-        """Generate ESG recommendations"""
-        recommendations = []
-
-        for pillar, score in esg_scores.items():
-            if score < 60:  # Below threshold
-                if pillar in esg_analysis and 'actions_prioritaires' in esg_analysis[pillar]:
-                    recommendations.extend(esg_analysis[pillar]['actions_prioritaires'][:2])
-
-        return recommendations[:5]
-
-    def _extract_weaknesses(self, analyses: Dict[str, Any]) -> str:
-        """Extract main weaknesses from analyses"""
-        weaknesses = []
-
-        pestel_score = analyses.get('pestel', {}).get('overall_score', 5)
-        if pestel_score < 6:
-            weaknesses.append(f"Score PESTEL faible ({pestel_score}/10)")
-
-        esg_score = analyses.get('esg', {}).get('overall_score', 50)
-        if esg_score < 60:
-            weaknesses.append(f"Score ESG faible ({esg_score}/100)")
-
-        return "\n".join(weaknesses) if weaknesses else "Aucune faiblesse majeure identifiée"
-
-    def _calculate_overall_score(self, analyses: Dict[str, Any]) -> float:
-        """Calculate overall company maturity score"""
-        pestel_score = analyses.get('pestel', {}).get('overall_score', 5)
-        esg_score = analyses.get('esg', {}).get('overall_score', 50)
-
-        # Convert to same scale and average
-        normalized_pestel = (pestel_score / 10) * 100
-        overall_score = (normalized_pestel + esg_score) / 2
-
-        return round(overall_score, 1)
-
-    def _generate_milestones(self) -> List[Dict[str, Any]]:
-        """Generate achievement milestones"""
-        return [
-            {
-                "score": 50,
-                "title": "Entreprise Consciente",
-                "benefits": [
-                    "Badge Bronze",
-                    "Accès formations avancées",
-                    "Visible par investisseurs locaux"
-                ]
-            },
-            {
-                "score": 75,
-                "title": "Entreprise Engagée",
-                "benefits": [
-                    "Badge Argent",
-                    "Matching fonds d'impact",
-                    "Certification ESG"
-                ]
-            },
-            {
-                "score": 85,
-                "title": "Entreprise Leader",
-                "benefits": [
-                    "Badge Or",
-                    "Accès investisseurs internationaux",
-                    "Partenariats stratégiques"
-                ]
-            }
-        ]
-
-
-# Global AI service instance
-ai_service = AIService()
+        Format JSON détaillé et opérationnel.
+        """
+        response = await self.gemini_llm.ainvoke([SystemMessage(content="Expert en planification stratégique"), HumanMessage(content=prompt)])
+        return json.loads(response.content.strip())
