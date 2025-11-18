@@ -3,13 +3,44 @@ Modèles de base de données pour Africa Strategy
 Développé par Ousmane Dicko
 """
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, DECIMAL, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, DECIMAL, ForeignKey, JSON, TypeDecorator
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 
 from app.core.database import Base
+
+
+# Type UUID compatible SQLite et PostgreSQL
+class GUID(TypeDecorator):
+    """Platform-independent GUID type"""
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            from sqlalchemy.dialects.postgresql import UUID
+            return dialect.type_descriptor(UUID(as_uuid=True))
+        else:
+            return dialect.type_descriptor(String(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return str(value)
+        else:
+            if not isinstance(value, uuid.UUID):
+                return str(uuid.UUID(value))
+            return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        else:
+            if not isinstance(value, uuid.UUID):
+                return uuid.UUID(value)
+            return value
 
 
 class EntrepreneurConfiguration(Base):
@@ -36,7 +67,7 @@ class User(Base):
     """Modèle utilisateur (entrepreneur)"""
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     first_name = Column(String(100), nullable=False)
@@ -65,8 +96,8 @@ class Questionnaire(Base):
     """Modèle questionnaire"""
     __tablename__ = "questionnaires"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text)
     status = Column(String(50), default="draft", index=True)  # draft, completed, analyzed
@@ -86,8 +117,8 @@ class PestelAnalysis(Base):
     """Modèle analyse PESTEL"""
     __tablename__ = "pestel_analyses"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    questionnaire_id = Column(UUID(as_uuid=True), ForeignKey("questionnaires.id"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    questionnaire_id = Column(GUID(), ForeignKey("questionnaires.id"), nullable=False, index=True)
     political_score = Column(Integer)
     economic_score = Column(Integer)
     social_score = Column(Integer)
@@ -108,8 +139,8 @@ class EsgAnalysis(Base):
     """Modèle analyse ESG"""
     __tablename__ = "esg_analyses"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    questionnaire_id = Column(UUID(as_uuid=True), ForeignKey("questionnaires.id"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    questionnaire_id = Column(GUID(), ForeignKey("questionnaires.id"), nullable=False, index=True)
     environmental_score = Column(Integer)
     social_score = Column(Integer)
     governance_score = Column(Integer)
@@ -129,8 +160,8 @@ class Roadmap(Base):
     """Modèle roadmap"""
     __tablename__ = "roadmaps"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text)
     current_phase = Column(String(100), default="diagnostic")
@@ -149,8 +180,8 @@ class RoadmapStep(Base):
     """Modèle étape de roadmap"""
     __tablename__ = "roadmap_steps"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    roadmap_id = Column(UUID(as_uuid=True), ForeignKey("roadmaps.id"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    roadmap_id = Column(GUID(), ForeignKey("roadmaps.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text)
     phase = Column(String(100), nullable=False)
@@ -175,8 +206,8 @@ class Score(Base):
     """Modèle score"""
     __tablename__ = "scores"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, index=True)
     score_type = Column(String(50), nullable=False, index=True)  # pestel, esg, overall
     score_value = Column(DECIMAL(5, 2), nullable=False)
     max_score = Column(DECIMAL(5, 2), nullable=False)
@@ -193,8 +224,8 @@ class ChatbotConversation(Base):
     """Modèle conversation chatbot"""
     __tablename__ = "chatbot_conversations"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, index=True)
     session_id = Column(String(255), nullable=False)
     messages = Column(JSON, nullable=False, default=[])
     context = Column(JSON, nullable=False, default={})
@@ -209,9 +240,9 @@ class Document(Base):
     """Modèle document"""
     __tablename__ = "documents"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    roadmap_step_id = Column(UUID(as_uuid=True), ForeignKey("roadmap_steps.id"), index=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False, index=True)
+    roadmap_step_id = Column(GUID(), ForeignKey("roadmap_steps.id"), index=True)
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)

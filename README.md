@@ -1,253 +1,406 @@
-# 🤖 Africa Strategy - Moteur IA d'Analyses Stratégiques
+# Africa Strategy – Notes d’atelier & Guide de prise en main
 
-**Développé par Ousmane Dicko** - Système IA avancé pour analyses stratégiques ESG et durabilité des entreprises africaines.
-
----
-
-## 🎯 Objectif du Projet
-
-Création d'un **moteur IA sophistiqué** qui fournit des analyses stratégiques complètes aux entrepreneurs africains. Le système transforme les données d'entreprise en insights actionnables via des analyses PESTEL, ESG, marché, chaîne de valeur et synthèse intégrale.
-
-### **Fonctionnalités IA Core**
-- **5 analyses stratégiques** : PESTEL, ESG, Marché, Chaîne de valeur, Impact durable
-- **Accès internet temps réel** : Données actuelles via Perplexity
-- **Synthèse intégrale** : Vue d'ensemble stratégique consolidée
-- **Roadmap IA** : Plans d'action personnalisés
-- **Chatbot contextuel** : Assistance intelligente
+Version nettoyée : seuls les fichiers utiles à l’exécution (backend, frontend, scripts de démarrage, docker-compose, README) restent dans le dépôt.
 
 ---
 
-## 🏗️ Architecture Technique
+## 1. Comment nous avons construit la solution (A ➜ Z)
 
-### **Backend IA - FastAPI (Python)**
-```
-🔧 Technologies : FastAPI, OpenRouter, PostgreSQL, Redis
-🎯 Rôle : Moteur IA, analyses stratégiques, APIs REST
-⚡ Performance : Async/await, cache intelligent
-```
+1. **Formulaire Next.js multi-étapes**  
+   - `pages/index.tsx` collecte secteur, profil, ODD, vision/mission et sauvegarde tout dans `sessionStorage`.
 
-### **IA Core - OpenRouter**
-```
-🤖 Modèles : Gemini 2.5 Flash + Perplexity
-🔍 Fonctions : Analyses stratégiques, recherche web temps réel
-📊 Analyses : PESTEL, ESG, marché, chaîne de valeur, synthèse intégrale
-```
+2. **API FastAPI dédiée**  
+   - `POST /api/analyze` (voir `backend/app/api/v1/endpoints/analyses.py`) crée un thread OpenAI Assistants, suit le run (polling 10 min), puis parse le JSON avec `JSONCleaner` pour supprimer commentaires/rescapés.
+   - `POST /api/enrich` passe les textes dans OpenRouter pour générer résumés et points clés.
+   - `POST /api/chat` transforme la dernière analyse en contexte pour le chatbot (Assistant OpenAI).
 
-### **Frontend - Next.js (React)**
-```
-⚛️ Technologies : Next.js 14, TypeScript, Tailwind CSS
-📱 Interface : Formulaire entreprise, dashboard analyses
-🎨 UX : Responsive, moderne, intuitive
-```
+3. **Dashboard Next.js**  
+   - `pages/dashboard.tsx` récupère `analysisResult` + formulaire, affiche 6 onglets (Overview, PESTEL, ESG, Market, Risk, Synthesis) avec Chart.js (radars, barres, doughnuts, lignes).
+   - Le chatbot (`components/Chatbot.tsx`) reprend la logique ChatGPT : bulles, suggestions, modal pleine largeur sur mobile. Il tape directement dans `/api/chat`.
 
-### **Infrastructure - Docker**
-```
-🐳 Services : PostgreSQL, Redis, Backend IA, Frontend
-🚀 Déploiement : Conteneurisé, scalable, production-ready
-```
+4. **Design system rapide**  
+   - Tailwind + classes utilitaires, couleurs harmonisées (palette `chartPalette`), cartes glassmorphism.
+   - Scripts `start_backend.bat` / `start_frontend.bat` pour tout lancer sans CLI.
 
 ---
 
-## 📋 Analyses IA Détaillées
+## 2. Lancer et tester la solution
 
-### **1. Analyse PESTEL (Politique, Économique, Social, Technologique, Environnemental, Légal)**
-- **Score 0-10** par dimension avec justifications détaillées
-- **Données temps réel** : Politiques gouvernementales, tendances économiques
-- **Recommandations prioritaires** : Actions concrètes par axe
-- **Contexte africain** : Spécificités Côte d'Ivoire et Afrique de l'Ouest
+### Pré-requis
+| Outil | Version |
+| --- | --- |
+| Python | >= 3.10 |
+| Node.js | >= 18 |
+| npm | >= 9 |
+| Clés API | `OPENAI_API_KEY`, `OPENAI_ASSISTANT_ID`, `OPENROUTER_API_KEY` |
 
-### **2. Analyse ESG (Environnemental, Social, Gouvernance)**
-- **Scoring automatique** : Basé sur questionnaire entreprise (30+ questions)
-- **Analyse détaillée** : Points forts/faibles par pilier
-- **Plans d'amélioration** : Recommandations personnalisées
-- **Benchmarks sectoriels** : Comparaisons avec standards ESG
+Copier `env.example` → `backend/.env`, puis compléter :
 
-### **3. Analyse Marché & Concurrence**
-- **Taille et croissance** : Marché sectoriel en Afrique
-- **Cartographie concurrents** : 5 principaux acteurs identifiés
-- **Tendances 2025** : Évolutions sectorielles majeures
-- **Opportunités** : Nouveaux marchés, niches identifiées
+```env
+OPENAI_API_KEY=sk-...
+OPENAI_ASSISTANT_ID=asst_...
+OPENROUTER_API_KEY=or-...
+BACKEND_CORS_ORIGINS=["http://localhost:3000"]
+ENVIRONMENT=development
+DEBUG=true
+```
 
-### **4. Analyse Chaîne de Valeur**
-- **Activités primaires** : Inbound, opérations, outbound, marketing, service
-- **Activités support** : Infrastructure, GRH, technologie, achats
-- **Points d'optimisation** : Améliorations d'efficacité identifiées
-- **Avantages concurrentiels** : Différenciateurs stratégiques
+### Option 1 – 100 % clic (Windows)
+1. Double-cliquer sur `start_backend.bat` → active le venv + lance `uvicorn app.main_simple:app --reload --port 8000`.
+2. Double-cliquer sur `start_frontend.bat` → `npm run dev` (Next.js) sur `http://localhost:3000`.
+3. Ouvrir le navigateur, remplir le formulaire, attendre l’analyse (logs côté backend), consulter le dashboard, ouvrir le chatbot via l’icône 💬.
 
-### **5. Analyse Impact Durable & ODD**
-- **Contribution ODD** : Impact mesuré par objectif (1-17 ODD)
-- **Triple bottom line** : People, Planet, Profit
-- **Score de durabilité** : Évaluation globale 0-100
-- **Recommandations impact** : Améliorations prioritaires
+### Option 2 – CLI (cross-platform)
 
-### **6. Synthèse Intégrale**
-- **Résumé exécutif** : Vue d'ensemble stratégique
-- **Conclusions clés** : 5-7 insights majeurs
-- **Recommandations stratégiques** : Priorisées par impact
-- **Score global consolidé** : Maturité entreprise 0-100
-
-### **7. Roadmap Stratégique IA**
-- **Génération automatique** : 4-5 phases sur 24 mois
-- **Actions concrètes** : 5-8 actions par phase avec métriques
-- **Investissement estimé** : Budgets réalistes par étape
-- **ROI projeté** : Retour sur investissement calculé
-
-### **8. Chatbot IA Contextuel**
-- **Réponses personnalisées** : Basées sur toutes les analyses
-- **Conseils stratégiques** : Adaptés au contexte africain
-- **Support opérationnel** : Aide à l'implémentation des recommandations
-
----
-
-## 🚀 Démarrage Rapide
-
-### **Prérequis**
-- Python 3.11+
-- Node.js 18+
-- Docker & Docker Compose
-- Clé API OpenRouter (gratuite)
-
-### **Installation**
 ```bash
-# 1. Cloner le repository
-git clone https://github.com/BigOD2307/africa-strategy-platform.git
-cd africa-strategy-platform
+# Backend
+cd backend
+python -m venv venv
+source venv/bin/activate   # ou venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main_simple:app --reload --port 8000
 
-# 2. Configuration environnement
-cp env.example .env
-# Éditer .env avec OPENROUTER_API_KEY
-
-# 3. Lancement complet
-docker-compose up -d
-
-# 4. Accès
-# Frontend : http://localhost:3000
-# API IA : http://localhost:8000
-# Docs API : http://localhost:8000/docs
+# Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-### **Test IA**
+### Tests rapides
+- **Ping API** : `curl http://localhost:8000/health`
+- **Type-check front** : `npm run type-check`
+- **Lint Next** : `npm run lint`
+
+---
+
+## 3. Structure minimale à connaître
+
+```
+A-S/
+├── backend/
+│   ├── app/
+│   │   ├── api/v1/endpoints     # analyze, enrich, chat, health
+│   │   ├── core                 # config, logging
+│   │   └── services             # OpenAI assistant, OpenRouter, JSON cleaner
+│   ├── main_simple.py           # entrypoint uvicorn
+│   ├── requirements.txt
+│   └── start_backend.bat
+├── frontend/
+│   ├── pages/index.tsx          # questionnaire
+│   ├── pages/dashboard.tsx      # dashboard complet
+│   ├── components/Chatbot.tsx
+│   └── start_frontend.bat
+├── docker-compose.yml           # optionnel, boot dev rapide
+├── env.example
+└── README.md
+```
+
+Ce qui a été retiré : anciens dumps SQLite, dossier `data/` et scripts de test obsolètes. Il ne reste que les éléments nécessaires à l’exécution décrits ci-dessus.
+
+---
+
+## 4. Décisions design & bonnes pratiques
+
+- **JSONCleaner** reconstruit les réponses Assistant (supprime commentaires, équilibre accolades) pour éviter les plantages.
+- **Chart.js** custom (palette + borderRadius) pour des visuels premium.
+- **Chatbot** en modal type ChatGPT, accessible via un simple bouton flottant.
+- **Scripts start\_*.bat** pour les utilisateurs non techniques (double clic suffit).
+
+---
+
+## 5. Dépannage rapide
+
+| Symptôme | Vérification |
+| --- | --- |
+| Analyse qui échoue | Logs backend (`uvicorn`), clé OpenAI correcte, JSONCleaner n’a pas écrit de `failed_json*.txt` |
+| Dashboard vide | `sessionStorage` n’a pas `analysisResult` (relancer le formulaire) |
+| Chatbot muet | L’icône 💬 s’affiche uniquement quand une analyse est en mémoire |
+
+---
+
+## 6. Roadmap (idées)
+- Persister les analyses en base (historique).
+- Auth simple + multi-projets.
+- Export PDF / partage de rapport.
+- Intégration RAG complète avec Pinecone/Chroma.
+
+---
+
+Projet maintenu par **Ousmane Dicko** – toute suggestion ou bug : ouvrir une issue ou pinger l’équipe interne.
+
+DATABASE_URL=sqlite:///./africa_strategy.db
+
+# CORS (pour le frontend)
+BACKEND_CORS_ORIGINS=["http://localhost:3000"]
+
+# Environnement
+ENVIRONMENT=development
+DEBUG=true
+```
+
+### 2. Configuration de l'Assistant OpenAI
+
+L'assistant OpenAI doit être configuré avec :
+- **Modèle** : GPT-4 ou GPT-4 Turbo
+- **Fonctionnalités** : 
+  - Code Interpreter (pour les calculs)
+  - Retrieval (pour RAG, optionnel)
+  - Internet (pour recherches web)
+- **Instructions** : Voir `docs/ASSISTANT_IA_SPECIFICATIONS.md`
+
+---
+
+## 🎮 Utilisation
+
+### Démarrage du Backend
+
 ```bash
-# Analyse complète
-curl -X POST http://localhost:8000/api/v1/analyses/integrated-synthesis \
-  -H "Content-Type: application/json" \
-  -d '{
-    "company_id": "test-123",
-    "company_data": {
-      "company_name": "AgriTech Côte d'Ivoire",
-      "sector": "agriculture",
-      "country": "Côte d'Ivoire",
-      "size": "PME"
-    },
-    "esg_responses": {
-      "energy_consumption": "yes_detailed",
-      "waste_management": "recycling_program"
-    }
-  }'
+cd backend
+
+# Activer l'environnement virtuel
+venv\Scripts\activate  # Windows
+# ou
+source venv/bin/activate  # Linux/Mac
+
+# Démarrer le serveur
+python -m uvicorn app.main_simple:app --reload --host 0.0.0.0 --port 8000
+```
+
+Le serveur démarre sur : **http://localhost:8000**
+
+### Démarrage du Frontend
+
+```bash
+cd frontend
+
+# Démarrer le serveur de développement
+npm run dev
+```
+
+Le frontend démarre sur : **http://localhost:3000**
+
+### Utilisation de l'Application
+
+1. **Accéder au formulaire** : Ouvrez http://localhost:3000
+2. **Remplir le questionnaire** : Suivez les 11 étapes
+3. **Lancer l'analyse** : Cliquez sur "Terminer et Analyser"
+4. **Attendre l'analyse** : L'IA génère l'analyse (2-10 minutes)
+5. **Consulter le dashboard** : Visualisez les résultats détaillés
+
+---
+
+## 🧪 Tests
+
+### Test du Backend
+
+```bash
+cd backend
+
+# Activer l'environnement virtuel
+venv\Scripts\activate
+
+# Tester la connexion OpenAI
+python test_backend.py
+
+# Tester l'API
+curl http://localhost:8000/health
+```
+
+### Test du Frontend
+
+```bash
+cd frontend
+
+# Lancer les tests
+npm test
+
+# Vérifier les types TypeScript
+npm run type-check
+```
+
+### Test End-to-End
+
+1. Démarrer le backend (port 8000)
+2. Démarrer le frontend (port 3000)
+3. Remplir le formulaire complet
+4. Vérifier que l'analyse se lance
+5. Vérifier que le dashboard affiche les résultats
+
+---
+
+## 📁 Structure du Projet
+
+```
+Africa-Strategy/
+├── backend/                      # Backend FastAPI
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── v1/
+│   │   │       └── endpoints/    # Endpoints API
+│   │   ├── core/
+│   │   │   ├── config.py        # Configuration
+│   │   │   └── database.py      # Base de données
+│   │   ├── models/              # Modèles SQLAlchemy
+│   │   ├── services/
+│   │   │   ├── openai_assistant_service.py  # Service OpenAI
+│   │   │   └── rag_service.py                # Service RAG (optionnel)
+│   │   └── main_simple.py       # Point d'entrée FastAPI
+│   ├── requirements.txt         # Dépendances Python
+│   └── test_backend.py          # Tests backend
+│
+├── frontend/                     # Frontend Next.js
+│   ├── components/
+│   │   └── ui/                  # Composants UI
+│   ├── lib/
+│   │   └── utils.ts             # Utilitaires
+│   ├── pages/
+│   │   ├── index.tsx            # Page questionnaire
+│   │   ├── dashboard.tsx        # Page dashboard
+│   │   └── _app.tsx             # App Next.js
+│   ├── styles/
+│   │   └── globals.css          # Styles globaux
+│   ├── package.json             # Dépendances Node
+│   └── tailwind.config.js       # Config Tailwind
+│
+├── data/                         # Données pour RAG (optionnel)
+│   └── ...                      # Documents à indexer
+│
+├── docs/                         # Documentation
+│   ├── ARCHITECTURE.md          # Architecture détaillée
+│   ├── ASSISTANT_IA_SPECIFICATIONS.md  # Spécifications IA
+│   └── TYPES_ANALYSES_DASHBOARD.md    # Types d'analyses
+│
+├── scripts/                      # Scripts utilitaires
+│   ├── test_questionnaire.py    # Test questionnaire
+│   └── test_system.py           # Test système
+│
+├── .env                          # Variables d'environnement (à créer)
+├── .gitignore                    # Fichiers ignorés par Git
+└── README.md                     # Ce fichier
 ```
 
 ---
 
-## 📊 APIs IA Disponibles
+## 📚 Documentation Technique
 
-### **Configuration**
-- `POST /api/v1/configuration/entrepreneur` - Sauvegarder profil entreprise
+### Documentation Disponible
 
-### **Analyses IA**
-- `POST /api/v1/analyses/pestel` - Analyse PESTEL
-- `POST /api/v1/analyses/esg` - Analyse ESG
-- `POST /api/v1/analyses/market-competition` - Analyse marché
-- `POST /api/v1/analyses/value-chain` - Analyse chaîne de valeur
-- `POST /api/v1/analyses/sustainability-impact` - Impact durable
-- `POST /api/v1/analyses/integrated-synthesis` - Synthèse complète
-- `POST /api/v1/analyses/strategic-roadmap` - Roadmap stratégique
+- **`docs/ARCHITECTURE.md`** : Architecture détaillée du système
+- **`docs/ASSISTANT_IA_SPECIFICATIONS.md`** : Spécifications complètes de l'assistant IA
+- **`docs/TYPES_ANALYSES_DASHBOARD.md`** : Types d'analyses et structure des données
 
-### **IA Interactive**
-- `POST /api/v1/analyses/chat-contextual` - Chatbot IA
+### API Endpoints
 
-### **Système**
-- `GET /api/v1/health` - État des services
-- `GET /api/v1/analyses/health` - État IA
+#### POST `/api/analyze`
+Analyse complète d'une entreprise via OpenAI Assistant.
 
----
+**Request Body:**
+```json
+{
+  "secteur": "Agriculture",
+  "zoneGeographique": "Afrique de l'Ouest",
+  "profilOrganisation": "Entreprise privée",
+  "paysInstallation": "Sénégal",
+  "objectifsDD": ["ODD 1 : Pas de pauvreté"],
+  "positionnementStrategique": "...",
+  "visionOrganisation": "...",
+  "missionOrganisation": "...",
+  "projetsSignificatifs": "..."
+}
+```
 
-## 📈 État d'Avancement
+**Response:**
+```json
+{
+  "analyses": {
+    "pestel": { ... },
+    "esg": { ... },
+    "market": { ... },
+    "risk": { ... },
+    "synthesis": { ... }
+  },
+  "pipeline_analytique": { ... },
+  "metadata": { ... }
+}
+```
 
-### **✅ TERMINÉ (75% - Semaines 1-3)**
-
-#### **Semaine 1 : Infrastructure Core** ✅
-- API FastAPI complète avec PostgreSQL
-- Frontend Next.js avec TypeScript
-- Configuration Docker production-ready
-- Base de données avec migrations et modèles
-
-#### **Semaine 2 : Configuration Entrepreneur** ✅
-- Formulaire 11 étapes interactif et validé
-- Sauvegarde automatique en base de données
-- API REST complète pour les données entreprise
-- Interface utilisateur fluide avec progression
-
-#### **Semaine 3 : IA Core Avancée** ✅
-- Intégration OpenRouter (Gemini 2.5 Flash + Perplexity)
-- 5 analyses stratégiques : PESTEL, ESG, Marché, Chaîne de valeur, Impact durable
-- Synthèse intégrale et roadmap IA
-- Chatbot contextuel avec mémoire des analyses
-- APIs REST complètes pour toutes les fonctionnalités IA
-
-### **🔄 RESTE À FAIRE (25% - Semaines 4-6)**
-
-#### **Semaine 4 : Dashboard Analytics** 🔄
-- Graphiques PESTEL (radar chart 6 dimensions)
-- Graphiques ESG (barres avec comparaisons)
-- Carte géographique interactive Afrique
-- Score global avec cercle de progression
-
-#### **Semaine 5 : Roadmap & Chatbot** 🔄
-- Timeline roadmap interactive avec phases
-- Système de validation d'étapes (upload documents)
-- Interface chatbot intégrée au dashboard
-- Gamification (badges Bronze/Argent/Or)
-
-#### **Semaine 6 : Finalisation** 🔄
-- Tests utilisateurs complets
-- Optimisations performance et sécurité
-- Déploiement production
-- Documentation développeur finale
-
-**Progression : 75% terminé - IA core opérationnelle**
+#### GET `/health`
+Health check du serveur.
 
 ---
 
-## 🛠️ Technologies IA Avancées
+## 🔧 Développement
 
-### **IA & Machine Learning**
-- **Gemini 2.5 Flash** : Analyse stratégique temps réel
-- **Perplexity** : Recherche web contextuelle
-- **LangChain** : Orchestration IA modulaire
-- **OpenRouter** : Gestion unifiée des modèles
+### Comment Nous Avons Créé le Projet
 
-### **Performance & Scalabilité**
-- **FastAPI Async** : 1000+ req/sec
-- **Redis Cache** : Réduction latence 80%
-- **PostgreSQL** : Données relationnelles optimisées
-- **Docker** : Déploiement horizontal
+1. **Backend FastAPI** : Création d'une API REST simple avec un seul endpoint `/api/analyze`
+2. **Intégration OpenAI Assistant** : Utilisation de l'API Assistants pour générer des analyses complètes
+3. **Frontend Next.js** : Création d'un formulaire multi-étapes et d'un dashboard interactif
+4. **Visualisation** : Intégration de Chart.js pour les graphiques
+5. **Design** : Style minimaliste avec inline styles pour garantir le rendu
 
-### **Sécurité & Monitoring**
-- **Sentry** : Monitoring erreurs temps réel
-- **CORS** : Sécurité API configurée
-- **Validation Pydantic** : Données sûres
-- **Logs structurés** : Debugging avancé
+### Améliorations Futures
 
----
-
-## 📞 Contact & Support
-
-**Développeur** : Ousmane Dicko
-**Client** : Hamed (Africa Strategy)
-**Repository** : [GitHub](https://github.com/BigOD2307/africa-strategy-platform)
-
-**Moteur IA Africa Strategy** - Analyses stratégiques pour la transformation durable ! 🤖✨
+- [ ] Ajout de l'authentification utilisateur
+- [ ] Sauvegarde des analyses en base de données
+- [ ] Export PDF des analyses
+- [ ] Comparaison d'analyses multiples
+- [ ] Intégration RAG complète avec Pinecone
+- [ ] Mode hors ligne
 
 ---
 
-*Développé avec excellence technique pour l'innovation africaine*
+## 🐛 Dépannage
+
+### Problèmes Courants
+
+#### Backend ne démarre pas
+- Vérifier que Python 3.8+ est installé
+- Vérifier que les dépendances sont installées : `pip install -r requirements.txt`
+- Vérifier que le fichier `.env` existe avec `OPENAI_API_KEY`
+
+#### Frontend ne démarre pas
+- Vérifier que Node.js 18+ est installé
+- Installer les dépendances : `npm install`
+- Vérifier que le port 3000 n'est pas utilisé
+
+#### L'analyse ne se lance pas
+- Vérifier que le backend est démarré sur le port 8000
+- Vérifier la clé API OpenAI dans `.env`
+- Vérifier les logs du backend pour les erreurs
+
+#### Le dashboard est vide
+- Vérifier que l'analyse s'est bien terminée
+- Vérifier la console du navigateur pour les erreurs
+- Vérifier que `sessionStorage` contient `analysisResult`
+
+---
+
+## 📝 Licence
+
+Développé par Ousmane Dicko
+
+---
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! Pour contribuer :
+
+1. Fork le projet
+2. Créer une branche (`git checkout -b feature/AmazingFeature`)
+3. Commit les changements (`git commit -m 'Add some AmazingFeature'`)
+4. Push vers la branche (`git push origin feature/AmazingFeature`)
+5. Ouvrir une Pull Request
+
+---
+
+## 📞 Support
+
+Pour toute question ou problème :
+- Consulter la documentation dans `docs/`
+- Vérifier les logs du serveur backend
+- Ouvrir une issue sur GitHub
+
+---
+
+**Version 1.0** - Décembre 2025

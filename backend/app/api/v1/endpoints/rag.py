@@ -9,7 +9,13 @@ from pydantic import BaseModel, Field
 import logging
 
 from app.services.rag_service import rag_service
-from app.services.data_import_service import data_import_service
+
+try:
+    from app.services.data_import_service import data_import_service
+    DATA_IMPORT_AVAILABLE = True
+except ImportError:
+    DATA_IMPORT_AVAILABLE = False
+    data_import_service = None
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +275,11 @@ async def import_database_data(
     Africa Strategy data from the database into the RAG system
     for enhanced AI analyses.
     """
+    if not DATA_IMPORT_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Data import service not available (asyncpg not installed)"
+        )
     try:
         # Default categories if none specified
         if not categories:
@@ -314,6 +325,11 @@ async def create_sample_data() -> ImportResponse:
     This endpoint creates sample documents representing different
     types of Africa Strategy data for testing the RAG system.
     """
+    if not DATA_IMPORT_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Data import service not available (asyncpg not installed)"
+        )
     try:
         result = await data_import_service.create_sample_data()
 

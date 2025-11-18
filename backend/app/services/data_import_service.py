@@ -9,14 +9,19 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-import asyncpg
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+logger = logging.getLogger(__name__)
+
+try:
+    import asyncpg
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker
+    ASYNCPG_AVAILABLE = True
+except ImportError:
+    ASYNCPG_AVAILABLE = False
+    logger.warning("asyncpg not installed - data import service disabled")
 
 from app.core.config import settings
 from app.services.rag_service import rag_service
-
-logger = logging.getLogger(__name__)
 
 
 class DataImportService:

@@ -63,6 +63,12 @@ class EnhancedAIService:
             if response.status_code == 200:
                 result = response.json()
                 return result["choices"][0]["message"]["content"]
+            elif response.status_code == 429:
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get('error', {}).get('message', 'Rate limit exceeded')
+                logger.warning(f"OpenRouter rate limit: {error_msg}")
+                # Return a helpful message instead of None
+                return f"[Rate Limit] Le modèle est temporairement limité. Veuillez réessayer dans quelques instants. Message: {error_msg}"
             else:
                 logger.error(f"OpenRouter API error: {response.status_code} - {response.text}")
                 return None

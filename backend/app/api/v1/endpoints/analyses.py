@@ -3,11 +3,11 @@ Enhanced AI Analyses API endpoints
 Provides comprehensive strategic analyses with RAG integration
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 import logging
 
-from app.services.enhanced_ai_service import enhanced_ai_service
+from app.services.ai_service import enhanced_ai_service
 
 logger = logging.getLogger(__name__)
 

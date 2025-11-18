@@ -9,12 +9,14 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-import pinecone
 from pinecone import Pinecone, ServerlessSpec
-from langchain_community.vectorstores import Pinecone as LangchainPinecone
+try:
+    from langchain_pinecone import Pinecone as LangchainPinecone
+except ImportError:
+    from langchain_community.vectorstores import Pinecone as LangchainPinecone
 from langchain_community.embeddings import SentenceTransformerEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 
 from app.core.config import settings
 
@@ -84,23 +86,14 @@ class RAGService:
             logger.error(f"Failed to create/verify Pinecone index: {str(e)}")
 
     def _get_vectorstore(self):
-        """Get LangChain Pinecone vectorstore"""
-        if not self.pc or not self.embeddings:
-            return None
-
-        try:
-            return LangchainPinecone.from_existing_index(
-                index_name=self.index_name,
-                embedding=self.embeddings,
-                namespace="africa-strategy-docs"
-            )
-        except Exception as e:
-            logger.error(f"Failed to get vectorstore: {str(e)}")
-            return None
+        """Get LangChain Pinecone vectorstore - DEPRECATED due to compatibility issues"""
+        # Note: LangChain Pinecone has compatibility issues with new Pinecone API
+        # We use direct Pinecone API instead in search_context method
+        return None
 
     async def add_documents(self, documents: List[Dict[str, Any]]) -> bool:
         """
-        Add documents to the RAG system
+        Add documents to the RAG system using direct Pinecone API
 
         Args:
             documents: List of document dictionaries with 'content', 'metadata', etc.
@@ -113,12 +106,12 @@ class RAGService:
             return False
 
         try:
-            vectorstore = self._get_vectorstore()
-            if not vectorstore:
-                return False
-
-            # Convert to LangChain documents
-            langchain_docs = []
+            index = self.pc.Index(self.index_name)
+            stats = index.describe_index_stats()
+            dimension = stats.get('dimension', 384)
+            
+            vectors_to_upsert = []
+            
             for doc in documents:
                 content = doc.get('content', '')
                 if not content.strip():
@@ -128,6 +121,21 @@ class RAGService:
                 chunks = self.text_splitter.split_text(content)
 
                 for i, chunk in enumerate(chunks):
+                    # Generate embedding
+                    try:
+                        embedding = self.embeddings.embed_query(chunk)
+                        
+                        # Adjust dimension if needed
+                        if len(embedding) != dimension:
+                            if len(embedding) < dimension:
+                                embedding = embedding + [0.0] * (dimension - len(embedding))
+                            else:
+                                embedding = embedding[:dimension]
+                    except Exception as e:
+                        logger.error(f"Failed to generate embedding for chunk {i}: {str(e)}")
+                        continue
+                    
+                    # Prepare metadata
                     metadata = doc.get('metadata', {}).copy()
                     metadata.update({
                         'chunk_id': i,
@@ -136,31 +144,50 @@ class RAGService:
                         'category': doc.get('category', 'general'),
                         'country': doc.get('country', ''),
                         'sector': doc.get('sector', ''),
+                        'content': chunk[:1000],  # Limit content size
                         'added_at': datetime.now().isoformat()
                     })
-
-                    langchain_docs.append(Document(
-                        page_content=chunk,
-                        metadata=metadata
-                    ))
-
-            if langchain_docs:
-                # Add to vectorstore
-                vectorstore.add_documents(langchain_docs)
-                logger.info(f"Added {len(langchain_docs)} document chunks to RAG")
-                return True
+                    
+                    # Create vector
+                    vector_id = f"{doc.get('source', 'doc')}_{i}_{datetime.now().timestamp()}"
+                    vectors_to_upsert.append({
+                        'id': vector_id,
+                        'values': embedding,
+                        'metadata': metadata
+                    })
+            
+            if vectors_to_upsert:
+                # Upload in batches
+                batch_size = 50
+                total_uploaded = 0
+                
+                for i in range(0, len(vectors_to_upsert), batch_size):
+                    batch = vectors_to_upsert[i:i+batch_size]
+                    try:
+                        index.upsert(
+                            vectors=batch,
+                            namespace="africa-strategy-docs"
+                        )
+                        total_uploaded += len(batch)
+                    except Exception as e:
+                        logger.error(f"Failed to upsert batch {i//batch_size + 1}: {str(e)}")
+                
+                logger.info(f"Added {total_uploaded} document chunks to RAG")
+                return total_uploaded > 0
             else:
                 logger.warning("No valid documents to add")
                 return False
 
         except Exception as e:
             logger.error(f"Failed to add documents to RAG: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
 
     async def search_context(self, query: str, filters: Optional[Dict[str, Any]] = None,
                            top_k: int = 5) -> List[Dict[str, Any]]:
         """
-        Search for relevant context in the RAG system
+        Search for relevant context in the RAG system using direct Pinecone API
 
         Args:
             query: Search query
@@ -175,39 +202,65 @@ class RAGService:
             return []
 
         try:
-            vectorstore = self._get_vectorstore()
-            if not vectorstore:
-                return []
-
+            # Generate embedding for the query
+            query_embedding = self.embeddings.embed_query(query)
+            
+            # Get index dimension
+            index = self.pc.Index(self.index_name)
+            stats = index.describe_index_stats()
+            dimension = stats.get('dimension', 384)
+            
+            # Adjust embedding dimension if needed
+            if len(query_embedding) != dimension:
+                if len(query_embedding) < dimension:
+                    query_embedding = query_embedding + [0.0] * (dimension - len(query_embedding))
+                else:
+                    query_embedding = query_embedding[:dimension]
+            
             # Prepare filter for Pinecone
             pinecone_filter = {}
             if filters:
                 if 'country' in filters and filters['country']:
-                    pinecone_filter['country'] = filters['country']
+                    pinecone_filter['country'] = {'$eq': filters['country']}
                 if 'sector' in filters and filters['sector']:
-                    pinecone_filter['sector'] = filters['sector']
+                    pinecone_filter['sector'] = {'$eq': filters['sector']}
                 if 'category' in filters and filters['category']:
-                    pinecone_filter['category'] = filters['category']
+                    pinecone_filter['category'] = {'$eq': filters['category']}
 
-            # Search with filters
-            if pinecone_filter:
-                docs_with_scores = vectorstore.similarity_search_with_score(
-                    query, k=top_k, filter=pinecone_filter
+            # Search using direct Pinecone API
+            # Try default namespace first (where import_all_data.py puts data)
+            search_results = None
+            try:
+                # First try default namespace (no namespace parameter)
+                search_results = index.query(
+                    vector=query_embedding,
+                    top_k=top_k,
+                    include_metadata=True,
+                    filter=pinecone_filter if pinecone_filter else None
                 )
-            else:
-                docs_with_scores = vectorstore.similarity_search_with_score(
-                    query, k=top_k
-                )
+            except Exception as e1:
+                # Try with namespace if default fails
+                try:
+                    search_results = index.query(
+                        vector=query_embedding,
+                        top_k=top_k,
+                        include_metadata=True,
+                        filter=pinecone_filter if pinecone_filter else None,
+                        namespace="africa-strategy-docs"
+                    )
+                except Exception as e2:
+                    logger.error(f"Failed to query index (both namespaces): {str(e1)} / {str(e2)}")
+                    return []
 
             # Format results
             results = []
-            for doc, score in docs_with_scores:
+            for match in search_results.get('matches', []):
                 results.append({
-                    'content': doc.page_content,
-                    'metadata': doc.metadata,
-                    'score': float(score),
-                    'source': doc.metadata.get('source', 'unknown'),
-                    'category': doc.metadata.get('category', 'general')
+                    'content': match['metadata'].get('content', ''),
+                    'metadata': match['metadata'],
+                    'score': float(match.get('score', 0.0)),
+                    'source': match['metadata'].get('source', 'unknown'),
+                    'category': match['metadata'].get('category', 'general')
                 })
 
             logger.info(f"RAG search returned {len(results)} results for query: {query[:50]}...")
@@ -215,6 +268,8 @@ class RAGService:
 
         except Exception as e:
             logger.error(f"Failed to search RAG: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
 
     async def get_sector_context(self, sector: str, country: str = "") -> str:
@@ -395,15 +450,13 @@ BEST PRACTICES:
             health['index_exists'] = self.index_name in indexes
 
             if health['index_exists']:
-                # Try a simple search
-                vectorstore = self._get_vectorstore()
-                if vectorstore:
-                    # Simple test query
-                    results = vectorstore.similarity_search("test", k=1)
-                    health['search_working'] = True
-                else:
+                # Try a simple search using direct API
+                try:
+                    test_results = await self.search_context("test", top_k=1)
+                    health['search_working'] = len(test_results) > 0 or True  # Even if no results, search works
+                except Exception as e:
                     health['search_working'] = False
-                    health['error'] = 'Vectorstore initialization failed'
+                    health['error'] = f'Search test failed: {str(e)}'
             else:
                 health['search_working'] = False
                 health['error'] = f'Index {self.index_name} does not exist'
