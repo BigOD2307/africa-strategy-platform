@@ -1,14 +1,26 @@
 """
-Service OpenAI Assistants pour Africa Strategy
-Utilise l'API OpenAI Assistants pour générer les analyses stratégiques complètes
+╔══════════════════════════════════════════════════════════════════════════════╗
+║           SERVICE OPENAI ASSISTANTS - AFRICA STRATEGY V2                      ║
+║              7 Assistants Spécialisés avec Exécution Parallèle               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Architecture :
+- 7 Assistants OpenAI spécialisés (un par bloc)
+- Exécution parallèle des blocs indépendants (BLOC1, BLOC3, BLOC4)
+- Chaînage des blocs dépendants (BLOC2→BLOC5→BLOC6→BLOC7)
+- RAG intégré via File Search d'OpenAI
+
+Auteur: Africa Strategy Platform
+Version: 2.0
 """
 
 import os
 import json
 import logging
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 from openai import OpenAI
 from app.core.config import settings
@@ -17,86 +29,233 @@ from app.services.json_cleaner import json_cleaner
 logger = logging.getLogger(__name__)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION DES 7 ASSISTANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ASSISTANT_IDS = {
+    "BLOC1": "asst_cyAXL6hJiw3voOPNe5Ldnvmy",  # PESTEL+
+    "BLOC2": "asst_wzCrfNe79wRe2YcrDLUrgt3w",  # Risques Climat
+    "BLOC3": "asst_rcF84GElGez5Wohbj2DdlDWb",  # Marché & Concurrence
+    "BLOC4": "asst_AaPHFcLr5mrYnyDtbmn8sIaw",  # Chaîne de Valeur
+    "BLOC5": "asst_gnmjd9Fzwiut4L3KtlhMPs9D",  # Modèles Durables & ODD
+    "BLOC6": "asst_IkNhVkjt0OwFld38baCF2Svi",  # Cadre Réglementaire (corrigé)
+    "BLOC7": "asst_7H46XK1u6fhmOdeSFz6jm1mU",  # Synthèse Stratégique
+}
+
+BLOC_NAMES = {
+    "BLOC1": "PESTEL+",
+    "BLOC2": "Risques Climat",
+    "BLOC3": "Marché & Concurrence",
+    "BLOC4": "Chaîne de Valeur",
+    "BLOC5": "Modèles Durables & ODD",
+    "BLOC6": "Cadre Réglementaire",
+    "BLOC7": "Synthèse Stratégique",
+}
+
+# Dépendances entre blocs
+BLOC_DEPENDENCIES = {
+    "BLOC1": [],                           # Indépendant
+    "BLOC2": ["BLOC1"],                    # Dépend de BLOC1
+    "BLOC3": ["BLOC1"],                    # Dépend de BLOC1
+    "BLOC4": ["BLOC1"],                    # Dépend de BLOC1
+    "BLOC5": ["BLOC1", "BLOC2"],          # Dépend de BLOC1 et BLOC2
+    "BLOC6": ["BLOC1", "BLOC2", "BLOC5"], # Dépend de BLOC1, BLOC2, BLOC5
+    "BLOC7": ["BLOC1", "BLOC2", "BLOC3", "BLOC4", "BLOC5", "BLOC6"],  # Tous
+}
+
+
 class OpenAIAssistantService:
     """
-    Service pour interagir avec l'Assistant OpenAI
+    Service pour orchestrer les 7 Assistants OpenAI spécialisés
     """
 
     def __init__(self):
         self.api_key = settings.OPENAI_API_KEY
-        self.assistant_id = settings.OPENAI_ASSISTANT_ID
+        self.assistant_ids = ASSISTANT_IDS
         
         if not self.api_key:
-            logger.warning("OpenAI API key not configured")
+            logger.warning("⚠️ OpenAI API key not configured")
             self.client = None
         else:
-            # Créer le client avec un timeout HTTP très long (15 minutes)
-            # pour les analyses longues qui peuvent prendre du temps
             import httpx
             self.client = OpenAI(
                 api_key=self.api_key,
-                timeout=httpx.Timeout(900.0, connect=30.0)  # 15 minutes total, 30s pour connexion
+                timeout=httpx.Timeout(900.0, connect=30.0)
             )
-            logger.info(f"OpenAI Assistant Service initialized with assistant ID: {self.assistant_id}")
+            logger.info("✅ OpenAI Assistant Service V2 initialized")
+            logger.info(f"   Assistants configurés: {list(self.assistant_ids.keys())}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # MÉTHODE PRINCIPALE : ANALYSE COMPLÈTE (7 BLOCS)
+    # ═══════════════════════════════════════════════════════════════════════════
 
     async def analyze_company(self, questionnaire_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyse complète d'une entreprise via l'Assistant OpenAI
+        Exécute l'analyse complète sur les 7 blocs avec orchestration intelligente.
         
-        Args:
-            questionnaire_data: Données du questionnaire rempli par l'utilisateur
-            
-        Returns:
-            Analyse complète au format JSON structuré
+        Stratégie d'exécution :
+        - Phase 1 : BLOC1 (seul, requis par tous)
+        - Phase 2 : BLOC2, BLOC3, BLOC4 en parallèle
+        - Phase 3 : BLOC5 (dépend de BLOC1 + BLOC2)
+        - Phase 4 : BLOC6 (dépend de BLOC1 + BLOC2 + BLOC5)
+        - Phase 5 : BLOC7 (consolidation finale)
         """
         if not self.client:
             raise Exception("OpenAI client not initialized - check API key")
         
+        start_time = datetime.now()
+        results = {}
+        errors = {}
+        
+        logger.info("═" * 60)
+        logger.info("🚀 DÉMARRAGE ANALYSE COMPLÈTE - 7 BLOCS")
+        logger.info("═" * 60)
+        
         try:
-            logger.info("Starting OpenAI Assistant analysis...")
+            # ─────────────────────────────────────────────────────────────────
+            # PHASE 1 : BLOC1 (PESTEL+) - Fondation pour tous les autres
+            # ─────────────────────────────────────────────────────────────────
+            logger.info("\n📊 PHASE 1 : Analyse PESTEL+ (BLOC1)")
+            results["BLOC1"] = await self._run_bloc("BLOC1", questionnaire_data, {})
+            logger.info(f"   ✅ BLOC1 terminé")
             
-            # 1. Créer un thread de conversation
+            # ─────────────────────────────────────────────────────────────────
+            # PHASE 2 : BLOC2, BLOC3, BLOC4 en PARALLÈLE
+            # ─────────────────────────────────────────────────────────────────
+            logger.info("\n📊 PHASE 2 : Blocs 2, 3, 4 en parallèle")
+            
+            context_phase2 = {"BLOC1": results["BLOC1"]}
+            
+            bloc2_task = self._run_bloc("BLOC2", questionnaire_data, context_phase2)
+            bloc3_task = self._run_bloc("BLOC3", questionnaire_data, context_phase2)
+            bloc4_task = self._run_bloc("BLOC4", questionnaire_data, context_phase2)
+            
+            phase2_results = await asyncio.gather(
+                bloc2_task, bloc3_task, bloc4_task,
+                return_exceptions=True
+            )
+            
+            # Traiter les résultats
+            for i, bloc_id in enumerate(["BLOC2", "BLOC3", "BLOC4"]):
+                if isinstance(phase2_results[i], Exception):
+                    logger.error(f"   ❌ {bloc_id} échoué: {str(phase2_results[i])}")
+                    errors[bloc_id] = str(phase2_results[i])
+                    results[bloc_id] = {"error": str(phase2_results[i])}
+                else:
+                    results[bloc_id] = phase2_results[i]
+                    logger.info(f"   ✅ {bloc_id} terminé")
+            
+            # ─────────────────────────────────────────────────────────────────
+            # PHASE 3 : BLOC5 (ODD) - Dépend de BLOC1 + BLOC2
+            # ─────────────────────────────────────────────────────────────────
+            logger.info("\n📊 PHASE 3 : Modèles Durables & ODD (BLOC5)")
+            context_phase3 = {
+                "BLOC1": results["BLOC1"],
+                "BLOC2": results["BLOC2"]
+            }
+            results["BLOC5"] = await self._run_bloc("BLOC5", questionnaire_data, context_phase3)
+            logger.info(f"   ✅ BLOC5 terminé")
+            
+            # ─────────────────────────────────────────────────────────────────
+            # PHASE 4 : BLOC6 (Réglementaire) - Dépend de BLOC1 + BLOC2 + BLOC5
+            # ─────────────────────────────────────────────────────────────────
+            logger.info("\n📊 PHASE 4 : Cadre Réglementaire (BLOC6)")
+            context_phase4 = {
+                "BLOC1": results["BLOC1"],
+                "BLOC2": results["BLOC2"],
+                "BLOC5": results["BLOC5"]
+            }
+            results["BLOC6"] = await self._run_bloc("BLOC6", questionnaire_data, context_phase4)
+            logger.info(f"   ✅ BLOC6 terminé")
+            
+            # ─────────────────────────────────────────────────────────────────
+            # PHASE 5 : BLOC7 (Synthèse) - Consolide tout
+            # ─────────────────────────────────────────────────────────────────
+            logger.info("\n📊 PHASE 5 : Synthèse Stratégique (BLOC7)")
+            results["BLOC7"] = await self._run_bloc("BLOC7", questionnaire_data, results)
+            logger.info(f"   ✅ BLOC7 terminé")
+            
+            # ─────────────────────────────────────────────────────────────────
+            # CONSOLIDATION FINALE
+            # ─────────────────────────────────────────────────────────────────
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            logger.info("\n" + "═" * 60)
+            logger.info(f"✅ ANALYSE COMPLÈTE TERMINÉE EN {int(duration)} SECONDES")
+            logger.info("═" * 60)
+            
+            # Construire la réponse finale
+            final_result = {
+                "success": True,
+                "metadata": {
+                    "generated_at": end_time.isoformat(),
+                    "duration_seconds": duration,
+                    "blocs_executed": list(results.keys()),
+                    "blocs_failed": list(errors.keys()) if errors else [],
+                    "questionnaire": {
+                        "pays": questionnaire_data.get("paysInstallation", ""),
+                        "secteur": questionnaire_data.get("secteur", ""),
+                        "profil": questionnaire_data.get("profilOrganisation", ""),
+                    }
+                },
+                "blocs": results,
+                "errors": errors if errors else None
+            }
+            
+            return final_result
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de l'analyse complète: {str(e)}")
+            raise
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # EXÉCUTION D'UN BLOC SPÉCIFIQUE
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def _run_bloc(
+        self, 
+        bloc_id: str, 
+        questionnaire_data: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Exécute un bloc spécifique via son assistant dédié.
+        """
+        assistant_id = self.assistant_ids.get(bloc_id)
+        if not assistant_id:
+            raise ValueError(f"Assistant ID non trouvé pour {bloc_id}")
+        
+        bloc_name = BLOC_NAMES.get(bloc_id, bloc_id)
+        logger.info(f"   🔄 Lancement {bloc_id} ({bloc_name})...")
+        
+        try:
+            # 1. Créer un thread
             thread = self.client.beta.threads.create()
             thread_id = thread.id
-            logger.info(f"Created thread: {thread_id}")
             
-            # 2. Préparer le message avec les données du questionnaire
-            message_content = self._prepare_questionnaire_message(questionnaire_data)
+            # 2. Construire le message utilisateur
+            user_message = self._build_user_message(bloc_id, questionnaire_data, context)
             
-            # **IMPORTANT** : Ajouter des instructions strictes sur le format JSON
-            final_message = f"""{message_content}
-
-⚠️ INSTRUCTIONS CRITIQUES POUR LE FORMAT DE SORTIE :
-1. Génère un JSON STRICTEMENT VALIDE sans AUCUN commentaire (//, /* */)
-2. NE PAS utiliser de raccourcis comme "// ... (ajout de X autres éléments...)"
-3. Si tu ne peux pas générer tous les éléments, génère uniquement ceux que tu peux compléter entièrement
-4. CHAQUE élément du JSON doit être complet et valide
-5. Le JSON doit être parsable directement sans aucun nettoyage
-
-RÉPONDS UNIQUEMENT AVEC UN JSON VALIDE, RIEN D'AUTRE."""
-            
-            # 3. Ajouter le message au thread
-            message = self.client.beta.threads.messages.create(
+            # 3. Envoyer le message
+            self.client.beta.threads.messages.create(
                 thread_id=thread_id,
                 role="user",
-                content=final_message
+                content=user_message
             )
-            logger.info("Message added to thread (avec instructions de format JSON)")
             
-            # 4. Lancer l'assistant
+            # 4. Lancer le run
             run = self.client.beta.threads.runs.create(
                 thread_id=thread_id,
-                assistant_id=self.assistant_id
+                assistant_id=assistant_id
             )
-            logger.info(f"Run started: {run.id}")
             
-            # 5. Attendre la completion (avec polling)
-            # Timeout augmenté à 10 minutes pour les analyses longues
-            logger.info("⏳ Attente de la réponse de l'assistant (peut prendre 2-10 minutes)...")
-            run = await self._wait_for_completion(thread_id, run.id, max_wait=600)
+            # 5. Attendre la completion
+            run = await self._wait_for_completion(thread_id, run.id, bloc_id)
             
             if run.status != "completed":
-                error_msg = f"Run failed with status: {run.status}"
+                error_msg = f"Run {bloc_id} failed: {run.status}"
                 if run.last_error:
                     error_msg += f" - {run.last_error.message}"
                 raise Exception(error_msg)
@@ -107,91 +266,148 @@ RÉPONDS UNIQUEMENT AVEC UN JSON VALIDE, RIEN D'AUTRE."""
                 order="asc"
             )
             
-            # Trouver le dernier message de l'assistant
             assistant_message = None
             for msg in reversed(messages.data):
                 if msg.role == "assistant":
                     assistant_message = msg
                     break
             
-            if not assistant_message:
-                raise Exception("No response from assistant")
-            
-            # 7. Extraire le contenu JSON
-            if not assistant_message.content or len(assistant_message.content) == 0:
-                raise Exception("Assistant message has no content")
+            if not assistant_message or not assistant_message.content:
+                raise Exception(f"Pas de réponse de l'assistant {bloc_id}")
             
             content = assistant_message.content[0].text.value
-            logger.info(f"✅ Réponse reçue de l'assistant ({len(content)} caractères)")
+            logger.info(f"   📥 Réponse {bloc_id}: {len(content)} caractères")
             
-            # Logger un aperçu du contenu pour debug
-            preview = content[:200] if len(content) > 200 else content
-            logger.info(f"   Aperçu: {preview}...")
+            # 7. Parser le JSON
+            result = json_cleaner.extract_and_parse(content)
             
-            # 8. Parser le JSON avec le nouveau cleaner robuste
-            logger.info("🔍 Parsing de la réponse avec JSONCleaner...")
-            analysis_result = json_cleaner.extract_and_parse(content)
-
-            if not isinstance(analysis_result, dict):
-                raise Exception("Assistant response is not a JSON object")
-
-            # Garantir l'existence des blocs clés
-            if "analyses" not in analysis_result or not isinstance(analysis_result.get("analyses"), dict):
-                logger.warning("⚠️ Clé 'analyses' absente ou invalide, initialisation d'un dictionnaire vide.")
-                analysis_result["analyses"] = {}
-            if "pipeline_analytique" not in analysis_result or not isinstance(analysis_result.get("pipeline_analytique"), dict):
-                logger.warning("⚠️ Clé 'pipeline_analytique' absente ou invalide, initialisation d'un dictionnaire vide.")
-                analysis_result["pipeline_analytique"] = {}
-            if "metadata" not in analysis_result or not isinstance(analysis_result.get("metadata"), dict):
-                logger.warning("⚠️ Clé 'metadata' absente ou invalide, initialisation d'un dictionnaire vide.")
-                analysis_result["metadata"] = {}
+            if not isinstance(result, dict):
+                raise Exception(f"Réponse {bloc_id} n'est pas un objet JSON")
             
-            # 9. Ajouter les métadonnées
-            analysis_result["metadata"]["run_id"] = run.id
-            analysis_result["metadata"]["thread_id"] = thread_id
-            analysis_result["metadata"]["generated_at"] = datetime.now().isoformat()
+            # Ajouter les métadonnées du bloc
+            result["_metadata"] = {
+                "bloc_id": bloc_id,
+                "bloc_name": bloc_name,
+                "thread_id": thread_id,
+                "run_id": run.id,
+                "generated_at": datetime.now().isoformat()
+            }
             
-            logger.info("Analysis completed successfully")
-            return analysis_result
+            return result
             
         except Exception as e:
-            logger.error(f"OpenAI Assistant analysis failed: {str(e)}")
+            logger.error(f"   ❌ Erreur {bloc_id}: {str(e)}")
             raise
 
-    def _prepare_questionnaire_message(self, data: Dict[str, Any]) -> str:
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CONSTRUCTION DU MESSAGE UTILISATEUR
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _build_user_message(
+        self, 
+        bloc_id: str, 
+        questionnaire_data: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> str:
         """
-        Prépare le message pour l'assistant avec les données du questionnaire
+        Construit le message utilisateur pour un bloc spécifique.
         """
-        message = f"""Analyse cette entreprise africaine en appliquant le pipeline analytique complet.
+        # Extraire les données du questionnaire
+        pays = questionnaire_data.get("paysInstallation", "Non spécifié")
+        zone = questionnaire_data.get("zoneGeographique", "Non spécifiée")
+        secteur = questionnaire_data.get("secteur", "Non spécifié")
+        profil = questionnaire_data.get("profilOrganisation", "Non spécifié")
+        biens_services = questionnaire_data.get("biensServices", [])
+        if isinstance(biens_services, list):
+            biens_services = ", ".join(biens_services)
+        marche_cible = questionnaire_data.get("marcheCible", "Non spécifié")
+        
+        # ODD
+        odd_auto = questionnaire_data.get("oddAutomatiques", [])
+        odd_manuels = questionnaire_data.get("oddManuels", [])
+        odd_declares = list(set(odd_auto + odd_manuels))
+        
+        vision = questionnaire_data.get("visionOrganisation", "Non spécifiée")
+        mission = questionnaire_data.get("missionOrganisation", "Non spécifiée")
+        projets = questionnaire_data.get("projetsSignificatifs", "Aucun")
+        
+        # Fichiers uploadés (contexte)
+        fichiers_context = questionnaire_data.get("fichiersContext", "Aucun fichier fourni")
+        
+        # Message de base
+        message = f"""## DONNÉES DU CLIENT
 
-DONNÉES DE L'ENTREPRISE:
-- Secteur d'activité: {data.get('secteur', 'Non spécifié')}
-- Zone géographique: {data.get('zoneGeographique', 'Non spécifiée')}
-- Pays d'installation: {data.get('paysInstallation', 'Non spécifié')}
-- Profil organisation: {data.get('profilOrganisation', 'Non spécifié')}
-- Biens/Services: {', '.join(data.get('biensServices', []))}
-- Autres biens/services: {data.get('autresBiensServices', 'Aucun')}
-- Objectifs DD: {', '.join(data.get('objectifsDD', []))}
-- Positionnement stratégique: {data.get('positionnementStrategique', 'Non spécifié')}
-- Vision: {data.get('visionOrganisation', 'Non spécifiée')}
-- Mission: {data.get('missionOrganisation', 'Non spécifiée')}
-- Projets significatifs: {data.get('projetsSignificatifs', 'Aucun')}
+### PROFIL ENTREPRISE
+- **Pays** : {pays}
+- **Zone géographique** : {zone}
+- **Secteur ISIC** : {secteur}
+- **Offre (Biens/Services)** : {biens_services}
+- **Marché cible** : {marche_cible}
+- **Profil utilisateur** : {profil}
 
-INSTRUCTIONS:
-1. Collecte massivement des données depuis tes connaissances, la base RAG, et Internet
-2. Applique rigoureusement le pipeline analytique avec toutes les formules
-3. Génère les 6 analyses détaillées (PESTEL, ESG, Marché, Chaîne de valeur, Impact durable, Synthèse)
-4. Retourne UNIQUEMENT un JSON valide et bien structuré selon le format demandé
-5. Assure-toi que l'analyse fait au moins 20 000 caractères de contenu valuable
+### STRATÉGIE DÉCLARÉE
+- **Vision** : {vision}
+- **Mission** : {mission}
+- **Projets significatifs** : {projets}
 
-Retourne maintenant l'analyse complète au format JSON."""
+### ODD SÉLECTIONNÉS
+- **ODD déclarés** : {', '.join([f"ODD{o}" for o in odd_declares]) if odd_declares else 'Aucun'}
+
+### FICHIERS COMPLÉMENTAIRES
+{fichiers_context}
+"""
+        
+        # Ajouter le contexte des blocs précédents si disponible
+        if context:
+            message += "\n\n### CONTEXTE DES BLOCS PRÉCÉDENTS\n"
+            for prev_bloc_id, prev_result in context.items():
+                if prev_result and isinstance(prev_result, dict):
+                    # Résumer les indices principaux
+                    indices = prev_result.get("indices", {})
+                    if indices:
+                        message += f"\n**{prev_bloc_id}** - Indices clés:\n"
+                        for key, value in indices.items():
+                            if isinstance(value, dict) and "score" in value:
+                                message += f"  - {key}: {value.get('score', 'N/A')}/100\n"
+                            elif isinstance(value, (int, float)):
+                                message += f"  - {key}: {value}/100\n"
+        
+        # Instructions finales
+        message += """
+
+---
+
+## INSTRUCTIONS D'EXÉCUTION
+
+1. Utilise les fichiers d'indicateurs attachés à ton assistant
+2. Applique rigoureusement le cadre méthodologique
+3. Calcule tous les indicateurs avec leurs scores normalisés
+4. Produis les analyses qualitatives détaillées
+5. Génère la synthèse stratégique
+6. **RETOURNE UNIQUEMENT UN JSON VALIDE** selon le format défini dans tes instructions
+
+⚠️ **FORMAT JSON STRICT** :
+- Aucun commentaire (// ou /* */)
+- Aucun texte avant ou après le JSON
+- Toutes les chaînes correctement échappées
+- Nombres sans guillemets
+"""
         
         return message
 
-    async def _wait_for_completion(self, thread_id: str, run_id: str, max_wait: int = 600) -> Any:
+    # ═══════════════════════════════════════════════════════════════════════════
+    # POLLING ET ATTENTE
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def _wait_for_completion(
+        self, 
+        thread_id: str, 
+        run_id: str, 
+        bloc_id: str,
+        max_wait: int = 300
+    ) -> Any:
         """
-        Attend la completion du run avec polling
-        max_wait: 600 secondes (10 minutes) par défaut pour les analyses longues
+        Attend la completion d'un run avec polling.
         """
         import time
         start_time = time.time()
@@ -199,274 +415,124 @@ Retourne maintenant l'analyse complète au format JSON."""
         
         while True:
             poll_count += 1
+            
             try:
                 run = self.client.beta.threads.runs.retrieve(
                     thread_id=thread_id,
                     run_id=run_id
                 )
             except Exception as e:
-                # Si une requête HTTP timeout, on continue à essayer
-                logger.warning(f"Erreur lors de la récupération du run (tentative {poll_count}): {str(e)}")
-                if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                    logger.info("   Timeout HTTP, on continue à attendre...")
-                    await asyncio.sleep(5)  # Attendre un peu plus avant de réessayer
+                if "timeout" in str(e).lower():
+                    logger.warning(f"   ⏳ Timeout HTTP {bloc_id}, retry...")
+                    await asyncio.sleep(5)
                     continue
-                else:
-                    # Autre erreur, on la propage
-                    raise
+                raise
             
-            # Calculer le temps écoulé
             elapsed = time.time() - start_time
             
-            # Logger le statut toutes les 10 secondes
-            if poll_count % 5 == 0 or run.status != "in_progress":
-                logger.info(f"Run status: {run.status} | Temps écoulé: {int(elapsed)}s / {max_wait}s")
+            # Log toutes les 30 secondes
+            if poll_count % 15 == 0:
+                logger.info(f"   ⏳ {bloc_id}: {run.status} ({int(elapsed)}s)")
             
             if run.status == "completed":
-                logger.info(f"✅ Run complété en {int(elapsed)} secondes")
                 return run
+            
             elif run.status == "failed":
-                error_msg = f"Run failed: {run.last_error.message if run.last_error else 'Unknown error'}"
-                logger.error(error_msg)
-                raise Exception(error_msg)
+                raise Exception(f"{bloc_id} failed: {run.last_error.message if run.last_error else 'Unknown'}")
+            
             elif run.status in ["cancelled", "expired"]:
-                error_msg = f"Run {run.status}"
-                logger.error(error_msg)
-                raise Exception(error_msg)
+                raise Exception(f"{bloc_id} {run.status}")
+            
             elif run.status == "requires_action":
-                # L'assistant attend une action (utilisation d'outils comme file_search, code_interpreter, etc.)
-                logger.info(f"⚠️ Run requires_action - L'assistant utilise des outils")
-                
+                # Gérer les tool outputs pour file_search
                 if run.required_action and run.required_action.type == "submit_tool_outputs":
-                    # L'assistant a utilisé des outils et attend les résultats
-                    tool_calls = run.required_action.submit_tool_outputs.tool_calls
-                    logger.info(f"   Nombre d'outils utilisés: {len(tool_calls)}")
-                    
-                    # Pour chaque tool_call, déterminer le type d'outil et soumettre un output approprié
                     tool_outputs = []
-                    for tool_call in tool_calls:
-                        tool_type = tool_call.function.name if hasattr(tool_call, 'function') else 'unknown'
-                        logger.info(f"   Outil: {tool_type} (ID: {tool_call.id})")
-                        
-                        # Pour les outils gérés automatiquement par OpenAI (file_search, etc.)
-                        # On peut soumettre un output vide ou un message de confirmation
-                        # Les outils comme file_search sont exécutés automatiquement par OpenAI
-                        if tool_type in ['file_search', 'code_interpreter']:
-                            # Ces outils sont gérés automatiquement, on soumet juste une confirmation
-                            tool_outputs.append({
-                                "tool_call_id": tool_call.id,
-                                "output": json.dumps({"status": "completed", "message": "Tool executed successfully"})
-                            })
-                        else:
-                            # Pour les autres outils, on soumet un output par défaut
-                            tool_outputs.append({
-                                "tool_call_id": tool_call.id,
-                                "output": json.dumps({"status": "completed"})
-                            })
+                    for tool_call in run.required_action.submit_tool_outputs.tool_calls:
+                        tool_outputs.append({
+                            "tool_call_id": tool_call.id,
+                            "output": json.dumps({"status": "completed"})
+                        })
                     
-                    # Soumettre les outputs pour continuer le run
-                    logger.info(f"   Soumission de {len(tool_outputs)} outputs...")
-                    try:
-                        updated_run = self.client.beta.threads.runs.submit_tool_outputs(
-                            thread_id=thread_id,
-                            run_id=run_id,
-                            tool_outputs=tool_outputs
-                        )
-                        logger.info(f"   ✅ Outputs soumis avec succès. Nouveau statut: {updated_run.status}")
-                        # Mettre à jour le run pour la prochaine itération
-                        run = updated_run
-                    except Exception as e:
-                        logger.error(f"   ❌ Erreur lors de la soumission des outputs: {str(e)}")
-                        # Continuer quand même, peut-être que l'outil se gère automatiquement
-                else:
-                    # Autre type d'action requise
-                    logger.warning(f"   Type d'action inconnu: {run.required_action.type if run.required_action else 'None'}")
-                    # On continue quand même à attendre
-            elif run.status == "queued":
-                logger.info(f"⏳ Run en file d'attente...")
-            elif run.status == "in_progress":
-                # Statut normal, on continue
-                pass
-            else:
-                logger.warning(f"⚠️ Statut inconnu: {run.status}")
+                    run = self.client.beta.threads.runs.submit_tool_outputs(
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        tool_outputs=tool_outputs
+                    )
             
-            # Vérifier le timeout
             if elapsed > max_wait:
-                error_msg = f"Run timeout after {max_wait} seconds (status: {run.status})"
-                logger.error(error_msg)
-                raise Exception(error_msg)
+                raise Exception(f"{bloc_id} timeout after {max_wait}s")
             
-            # Limite de sécurité : si on a fait trop de polls, logger un avertissement
-            if poll_count > 300:  # 10 minutes à 2 secondes par poll
-                logger.warning(f"⚠️ Nombre de polls élevé: {poll_count} (statut: {run.status}, temps: {int(elapsed)}s)")
-            
-            # Attendre avant de re-poll
-            # Si requires_action vient d'être traité, attendre un peu plus
-            wait_time = 3 if run.status == "requires_action" else 2
-            await asyncio.sleep(wait_time)
+            await asyncio.sleep(2)
 
-    def _parse_assistant_response(self, content: str) -> Dict[str, Any]:
+    # ═══════════════════════════════════════════════════════════════════════════
+    # MÉTHODE POUR UN BLOC UNIQUE (API PUBLIQUE)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def analyze_bloc(
+        self, 
+        bloc_id: str, 
+        questionnaire_data: Dict[str, Any],
+        previous_results: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """
-        Parse la réponse de l'assistant pour extraire le JSON
-        Gère les grandes réponses (20K+ caractères) de manière robuste
+        Exécute un seul bloc spécifique.
+        Utilisable pour des analyses incrémentales.
         """
-        try:
-            import re
-            
-            logger.info(f"Parsing response ({len(content)} caractères)...")
-            
-            # Nettoyer le contenu : enlever les espaces en début/fin
-            content = content.strip()
-            
-            # Pattern 1: ```json ... ``` (le plus courant)
-            json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1).strip()
-                logger.info("JSON trouvé dans bloc ```json```")
-                
-                # **NOUVEAU** : Supprimer les commentaires JavaScript (// ...)
-                logger.info("Nettoyage des commentaires JavaScript...")
-                # Supprimer les commentaires // jusqu'à la fin de ligne
-                json_str = re.sub(r'//[^\n]*', '', json_str)
-                # Supprimer les commentaires /* ... */
-                json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
-            else:
-                # Pattern 2: ``` ... ``` (sans json)
-                json_match = re.search(r'```\s*(.*?)\s*```', content, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(1).strip()
-                    logger.info("JSON trouvé dans bloc ```")
-                    
-                    # **NOUVEAU** : Supprimer les commentaires JavaScript
-                    json_str = re.sub(r'//[^\n]*', '', json_str)
-                    json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
-                else:
-                    # Pattern 3: Chercher le premier { jusqu'au dernier }
-                    start = content.find('{')
-                    end = content.rfind('}') + 1
-                    if start != -1 and end > start:
-                        json_str = content[start:end]
-                        logger.info(f"JSON trouvé directement (position {start} à {end})")
-                    else:
-                        raise Exception("No JSON found in assistant response")
-            
-            # **NOUVEAU** : Nettoyer les commentaires JS partout (au cas où)
-            logger.info("🧹 Nettoyage des commentaires JavaScript...")
-            json_str = re.sub(r'//[^\n]*', '', json_str)
-            json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
-            
-            # Nettoyer les lignes vides multiples
-            json_str = re.sub(r'\n\s*\n', '\n', json_str)
-            
-            # Nettoyer le JSON : enlever les espaces
-            json_str = json_str.strip()
-            
-            logger.info(f"📏 JSON après nettoyage : {len(json_str)} caractères")
-            
-            # Parser le JSON avec gestion d'erreur détaillée
-            try:
-                result = json.loads(json_str)
-            except json.JSONDecodeError as json_err:
-                # Si erreur de parsing, essayer de corriger les problèmes courants
-                logger.warning(f"Erreur JSON initiale: {str(json_err)}")
-                
-                # Essayer de corriger les virgules en fin de ligne
-                json_str_fixed = re.sub(r',\s*}', '}', json_str)
-                json_str_fixed = re.sub(r',\s*]', ']', json_str_fixed)
-                
-                # **NOUVEAU** : Corrections supplémentaires
-                # Supprimer les virgules en double
-                json_str_fixed = re.sub(r',\s*,', ',', json_str_fixed)
-                
-                # Supprimer les virgules avant les accolades (cas non couvert)
-                json_str_fixed = re.sub(r',(\s*\})', r'\1', json_str_fixed)
-                json_str_fixed = re.sub(r',(\s*\])', r'\1', json_str_fixed)
-                
-                # Nettoyer les espaces multiples
-                json_str_fixed = re.sub(r'\s+', ' ', json_str_fixed)
-                
-                try:
-                    result = json.loads(json_str_fixed)
-                    logger.info("✅ JSON corrigé et parsé avec succès")
-                except:
-                    # Si ça ne marche toujours pas, logger plus de détails
-                    error_pos = getattr(json_err, 'pos', None)
-                    if error_pos:
-                        start_context = max(0, error_pos - 100)
-                        end_context = min(len(json_str), error_pos + 100)
-                        logger.error(f"Contexte de l'erreur (position {error_pos}):")
-                        logger.error(f"{json_str[start_context:end_context]}")
-                    
-                    # **NOUVEAU** : Enregistrer le JSON problématique pour debug
-                    try:
-                        with open("failed_json_debug.txt", "w", encoding="utf-8") as f:
-                            f.write(json_str_fixed)
-                        logger.error("💾 JSON problématique sauvegardé dans failed_json_debug.txt")
-                    except:
-                        pass
-                    
-                    raise json_err
-            
-            # Valider la structure de base
-            if not isinstance(result, dict):
-                raise Exception("Response is not a JSON object")
-            
-            # S'assurer que les clés principales existent avec des valeurs par défaut
-            if "analyses" not in result:
-                result["analyses"] = {}
-            if "pipeline_analytique" not in result:
-                result["pipeline_analytique"] = {}
-            if "metadata" not in result:
-                result["metadata"] = {}
-            
-            logger.info(f"✅ JSON parsé avec succès. Clés principales: {list(result.keys())}")
-            
-            return result
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ Erreur de parsing JSON: {str(e)}")
-            error_pos = getattr(e, 'pos', None)
-            if error_pos:
-                preview_start = max(0, error_pos - 200)
-                preview_end = min(len(content), error_pos + 200)
-                logger.error(f"Contexte de l'erreur (position {error_pos}):")
-                logger.error(f"{content[preview_start:preview_end]}")
-            else:
-                logger.error(f"Aperçu du contenu: {content[:1000]}")
-            raise Exception(f"Failed to parse JSON from assistant response: {str(e)}")
-        except Exception as e:
-            logger.error(f"❌ Erreur lors du parsing: {str(e)}")
-            logger.error(f"Type d'erreur: {type(e).__name__}")
-            raise
+        if not self.client:
+            raise Exception("OpenAI client not initialized")
+        
+        bloc_id = bloc_id.upper()
+        if bloc_id not in self.assistant_ids:
+            raise ValueError(f"Bloc inconnu: {bloc_id}. Blocs valides: {list(self.assistant_ids.keys())}")
+        
+        context = previous_results or {}
+        result = await self._run_bloc(bloc_id, questionnaire_data, context)
+        
+        return {
+            "success": True,
+            "bloc_id": bloc_id,
+            "bloc_name": BLOC_NAMES.get(bloc_id),
+            "result": result
+        }
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # HEALTH CHECK
+    # ═══════════════════════════════════════════════════════════════════════════
 
     async def health_check(self) -> Dict[str, Any]:
         """
-        Vérifie que le service est opérationnel
+        Vérifie que tous les assistants sont accessibles.
         """
         if not self.client:
-            return {
-                "status": "error",
-                "message": "OpenAI client not initialized"
-            }
+            return {"status": "error", "message": "OpenAI client not initialized"}
         
-        try:
-            # Vérifier que l'assistant existe
-            assistant = self.client.beta.assistants.retrieve(self.assistant_id)
-            
-            return {
-                "status": "healthy",
-                "assistant_id": self.assistant_id,
-                "assistant_name": assistant.name,
-                "model": assistant.model,
-                "tools": [tool.type for tool in assistant.tools] if assistant.tools else []
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+        results = {}
+        all_healthy = True
+        
+        for bloc_id, assistant_id in self.assistant_ids.items():
+            try:
+                assistant = self.client.beta.assistants.retrieve(assistant_id)
+                results[bloc_id] = {
+                    "status": "healthy",
+                    "name": assistant.name,
+                    "model": assistant.model,
+                    "tools": [t.type for t in assistant.tools] if assistant.tools else []
+                }
+            except Exception as e:
+                all_healthy = False
+                results[bloc_id] = {
+                    "status": "error",
+                    "message": str(e)
+                }
+        
+        return {
+            "status": "healthy" if all_healthy else "degraded",
+            "assistants": results
+        }
 
 
-# Instance globale du service
+# ═══════════════════════════════════════════════════════════════════════════════
+# INSTANCE GLOBALE
+# ═══════════════════════════════════════════════════════════════════════════════
+
 openai_assistant_service = OpenAIAssistantService()
-
