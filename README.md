@@ -71,16 +71,19 @@ OPENAI_API_KEY=sk-votre-cle-openai-ici
 
 Vous devez créer 7 assistants sur [platform.openai.com](https://platform.openai.com/assistants) :
 
-1. Aller sur OpenAI Platform → Assistants
-2. Créer 7 assistants (BLOC1 à BLOC7)
-3. Pour chaque assistant, copier les instructions depuis `backend/app/config/prompts/blocX_prompt.py`
-4. Noter les IDs des assistants
+1. Aller sur OpenAI Platform → Assistants → Create Assistant
+2. Pour chaque assistant (BLOC1 à BLOC7) :
+   - **Nom** : "BLOC1 - PESTEL+", "BLOC2 - Risques Climat", etc.
+   - **Instructions** : Ouvrir `backend/app/config/prompts/blocX_prompt.py` et copier le contenu de `SYSTEM_PROMPT`
+   - **Model** : `gpt-4o` ou `gpt-4o-mini`
+   - **Tools** : Activer "File Search" si vous avez des fichiers RAG
+3. Noter l'ID de chaque assistant (format: `asst_xxxxx`)
 
-Puis modifier `backend/app/main_simple.py` ligne ~50 :
+**Modifier le fichier `backend/app/services/openai_assistant_service.py` aux lignes 36-44 :**
 
 ```python
 ASSISTANT_IDS = {
-    "BLOC1": "asst_votre_id_bloc1",
+    "BLOC1": "asst_votre_id_bloc1",  # Remplacez par votre ID réel
     "BLOC2": "asst_votre_id_bloc2",
     "BLOC3": "asst_votre_id_bloc3",
     "BLOC4": "asst_votre_id_bloc4",
@@ -89,6 +92,8 @@ ASSISTANT_IDS = {
     "BLOC7": "asst_votre_id_bloc7",
 }
 ```
+
+⚠️ **Important** : Remplacez chaque `asst_votre_id_blocX` par le vrai ID de votre assistant créé sur OpenAI (format: `asst_xxxxx`).
 
 ### 5. Configurer le Frontend
 
