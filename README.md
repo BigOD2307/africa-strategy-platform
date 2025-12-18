@@ -1,406 +1,234 @@
-# Africa Strategy – Notes d’atelier & Guide de prise en main
+# 🌍 Africa Strategy Platform V2
 
-Version nettoyée : seuls les fichiers utiles à l’exécution (backend, frontend, scripts de démarrage, docker-compose, README) restent dans le dépôt.
+Plateforme d'analyse stratégique durable pour les entreprises africaines, utilisant l'IA (OpenAI) pour générer des analyses complètes en 7 blocs.
+
+## 🚀 Fonctionnalités
+
+- **7 Assistants IA spécialisés** pour des analyses approfondies
+- **Dashboard interactif** avec graphiques et indicateurs
+- **Chatbot contextuel** pour poser des questions sur les analyses
+- **Formulaire intelligent** adapté aux profils utilisateurs
+
+### Les 7 Blocs d'Analyse
+
+| Bloc | Contenu |
+|------|---------|
+| 🌍 BLOC 1 | PESTEL+ (Politique, Économie, Social, Tech, Environnement, Légal, Climat, Biodiversité) |
+| 🌡️ BLOC 2 | Risques Climat & Transition |
+| 📈 BLOC 3 | Marché & Concurrence |
+| 🔗 BLOC 4 | Chaîne de Valeur Durable |
+| 🎯 BLOC 5 | ODD & Durabilité |
+| ⚖️ BLOC 6 | Cadre Réglementaire |
+| 📋 BLOC 7 | Synthèse Stratégique |
 
 ---
 
-## 1. Comment nous avons construit la solution (A ➜ Z)
+## 📋 Prérequis
 
-1. **Formulaire Next.js multi-étapes**  
-   - `pages/index.tsx` collecte secteur, profil, ODD, vision/mission et sauvegarde tout dans `sessionStorage`.
-
-2. **API FastAPI dédiée**  
-   - `POST /api/analyze` (voir `backend/app/api/v1/endpoints/analyses.py`) crée un thread OpenAI Assistants, suit le run (polling 10 min), puis parse le JSON avec `JSONCleaner` pour supprimer commentaires/rescapés.
-   - `POST /api/enrich` passe les textes dans OpenRouter pour générer résumés et points clés.
-   - `POST /api/chat` transforme la dernière analyse en contexte pour le chatbot (Assistant OpenAI).
-
-3. **Dashboard Next.js**  
-   - `pages/dashboard.tsx` récupère `analysisResult` + formulaire, affiche 6 onglets (Overview, PESTEL, ESG, Market, Risk, Synthesis) avec Chart.js (radars, barres, doughnuts, lignes).
-   - Le chatbot (`components/Chatbot.tsx`) reprend la logique ChatGPT : bulles, suggestions, modal pleine largeur sur mobile. Il tape directement dans `/api/chat`.
-
-4. **Design system rapide**  
-   - Tailwind + classes utilitaires, couleurs harmonisées (palette `chartPalette`), cartes glassmorphism.
-   - Scripts `start_backend.bat` / `start_frontend.bat` pour tout lancer sans CLI.
+- **Python 3.10+**
+- **Node.js 18+**
+- **Clé API OpenAI** (avec accès aux Assistants)
 
 ---
 
-## 2. Lancer et tester la solution
+## 🛠️ Installation
 
-### Pré-requis
-| Outil | Version |
-| --- | --- |
-| Python | >= 3.10 |
-| Node.js | >= 18 |
-| npm | >= 9 |
-| Clés API | `OPENAI_API_KEY`, `OPENAI_ASSISTANT_ID`, `OPENROUTER_API_KEY` |
+### 1. Cloner le projet
 
-Copier `env.example` → `backend/.env`, puis compléter :
+```bash
+git clone https://github.com/BigOD2307/africa-strategy-platform.git
+cd africa-strategy-platform
+```
+
+### 2. Configurer le Backend
+
+```bash
+# Aller dans le dossier backend
+cd backend
+
+# Créer un environnement virtuel
+python -m venv venv
+
+# Activer l'environnement (Windows)
+.\venv\Scripts\activate
+
+# Activer l'environnement (Mac/Linux)
+source venv/bin/activate
+
+# Installer les dépendances
+pip install -r requirements.txt
+```
+
+### 3. Configurer les variables d'environnement
+
+Créer un fichier `.env` dans le dossier `backend/` :
 
 ```env
-OPENAI_API_KEY=sk-...
-OPENAI_ASSISTANT_ID=asst_...
-OPENROUTER_API_KEY=or-...
-BACKEND_CORS_ORIGINS=["http://localhost:3000"]
-ENVIRONMENT=development
-DEBUG=true
+OPENAI_API_KEY=sk-votre-cle-openai-ici
 ```
 
-### Option 1 – 100 % clic (Windows)
-1. Double-cliquer sur `start_backend.bat` → active le venv + lance `uvicorn app.main_simple:app --reload --port 8000`.
-2. Double-cliquer sur `start_frontend.bat` → `npm run dev` (Next.js) sur `http://localhost:3000`.
-3. Ouvrir le navigateur, remplir le formulaire, attendre l’analyse (logs côté backend), consulter le dashboard, ouvrir le chatbot via l’icône 💬.
+### 4. Créer les Assistants OpenAI
 
-### Option 2 – CLI (cross-platform)
+Vous devez créer 7 assistants sur [platform.openai.com](https://platform.openai.com/assistants) :
+
+1. Aller sur OpenAI Platform → Assistants
+2. Créer 7 assistants (BLOC1 à BLOC7)
+3. Pour chaque assistant, copier les instructions depuis `backend/app/config/prompts/blocX_prompt.py`
+4. Noter les IDs des assistants
+
+Puis modifier `backend/app/main_simple.py` ligne ~50 :
+
+```python
+ASSISTANT_IDS = {
+    "BLOC1": "asst_votre_id_bloc1",
+    "BLOC2": "asst_votre_id_bloc2",
+    "BLOC3": "asst_votre_id_bloc3",
+    "BLOC4": "asst_votre_id_bloc4",
+    "BLOC5": "asst_votre_id_bloc5",
+    "BLOC6": "asst_votre_id_bloc6",
+    "BLOC7": "asst_votre_id_bloc7",
+}
+```
+
+### 5. Configurer le Frontend
 
 ```bash
-# Backend
-cd backend
-python -m venv venv
-source venv/bin/activate   # ou venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main_simple:app --reload --port 8000
+# Revenir à la racine et aller dans frontend
+cd ../frontend
 
-# Frontend
-cd frontend
+# Installer les dépendances
 npm install
+```
+
+---
+
+## ▶️ Lancement
+
+### Option 1 : Lancement manuel
+
+**Terminal 1 - Backend :**
+```bash
+cd backend
+.\venv\Scripts\activate  # Windows
+# ou: source venv/bin/activate  # Mac/Linux
+python -m uvicorn app.main_simple:app --reload --port 8000
+```
+
+**Terminal 2 - Frontend :**
+```bash
+cd frontend
 npm run dev
 ```
 
-### Tests rapides
-- **Ping API** : `curl http://localhost:8000/health`
-- **Type-check front** : `npm run type-check`
-- **Lint Next** : `npm run lint`
+### Option 2 : Utiliser les scripts (Windows)
+
+Double-cliquer sur :
+- `start_backend.bat` pour lancer le backend
+- `start_frontend.bat` pour lancer le frontend
 
 ---
 
-## 3. Structure minimale à connaître
+## 🌐 Accès
 
-```
-A-S/
-├── backend/
-│   ├── app/
-│   │   ├── api/v1/endpoints     # analyze, enrich, chat, health
-│   │   ├── core                 # config, logging
-│   │   └── services             # OpenAI assistant, OpenRouter, JSON cleaner
-│   ├── main_simple.py           # entrypoint uvicorn
-│   ├── requirements.txt
-│   └── start_backend.bat
-├── frontend/
-│   ├── pages/index.tsx          # questionnaire
-│   ├── pages/dashboard.tsx      # dashboard complet
-│   ├── components/Chatbot.tsx
-│   └── start_frontend.bat
-├── docker-compose.yml           # optionnel, boot dev rapide
-├── env.example
-└── README.md
-```
-
-Ce qui a été retiré : anciens dumps SQLite, dossier `data/` et scripts de test obsolètes. Il ne reste que les éléments nécessaires à l’exécution décrits ci-dessus.
+- **Frontend** : http://localhost:3000
+- **Backend API** : http://localhost:8000
+- **Documentation API** : http://localhost:8000/docs
 
 ---
 
-## 4. Décisions design & bonnes pratiques
+## 📖 Utilisation
 
-- **JSONCleaner** reconstruit les réponses Assistant (supprime commentaires, équilibre accolades) pour éviter les plantages.
-- **Chart.js** custom (palette + borderRadius) pour des visuels premium.
-- **Chatbot** en modal type ChatGPT, accessible via un simple bouton flottant.
-- **Scripts start\_*.bat** pour les utilisateurs non techniques (double clic suffit).
-
----
-
-## 5. Dépannage rapide
-
-| Symptôme | Vérification |
-| --- | --- |
-| Analyse qui échoue | Logs backend (`uvicorn`), clé OpenAI correcte, JSONCleaner n’a pas écrit de `failed_json*.txt` |
-| Dashboard vide | `sessionStorage` n’a pas `analysisResult` (relancer le formulaire) |
-| Chatbot muet | L’icône 💬 s’affiche uniquement quand une analyse est en mémoire |
-
----
-
-## 6. Roadmap (idées)
-- Persister les analyses en base (historique).
-- Auth simple + multi-projets.
-- Export PDF / partage de rapport.
-- Intégration RAG complète avec Pinecone/Chroma.
-
----
-
-Projet maintenu par **Ousmane Dicko** – toute suggestion ou bug : ouvrir une issue ou pinger l’équipe interne.
-
-DATABASE_URL=sqlite:///./africa_strategy.db
-
-# CORS (pour le frontend)
-BACKEND_CORS_ORIGINS=["http://localhost:3000"]
-
-# Environnement
-ENVIRONMENT=development
-DEBUG=true
-```
-
-### 2. Configuration de l'Assistant OpenAI
-
-L'assistant OpenAI doit être configuré avec :
-- **Modèle** : GPT-4 ou GPT-4 Turbo
-- **Fonctionnalités** : 
-  - Code Interpreter (pour les calculs)
-  - Retrieval (pour RAG, optionnel)
-  - Internet (pour recherches web)
-- **Instructions** : Voir `docs/ASSISTANT_IA_SPECIFICATIONS.md`
-
----
-
-## 🎮 Utilisation
-
-### Démarrage du Backend
-
-```bash
-cd backend
-
-# Activer l'environnement virtuel
-venv\Scripts\activate  # Windows
-# ou
-source venv/bin/activate  # Linux/Mac
-
-# Démarrer le serveur
-python -m uvicorn app.main_simple:app --reload --host 0.0.0.0 --port 8000
-```
-
-Le serveur démarre sur : **http://localhost:8000**
-
-### Démarrage du Frontend
-
-```bash
-cd frontend
-
-# Démarrer le serveur de développement
-npm run dev
-```
-
-Le frontend démarre sur : **http://localhost:3000**
-
-### Utilisation de l'Application
-
-1. **Accéder au formulaire** : Ouvrez http://localhost:3000
-2. **Remplir le questionnaire** : Suivez les 11 étapes
-3. **Lancer l'analyse** : Cliquez sur "Terminer et Analyser"
-4. **Attendre l'analyse** : L'IA génère l'analyse (2-10 minutes)
-5. **Consulter le dashboard** : Visualisez les résultats détaillés
-
----
-
-## 🧪 Tests
-
-### Test du Backend
-
-```bash
-cd backend
-
-# Activer l'environnement virtuel
-venv\Scripts\activate
-
-# Tester la connexion OpenAI
-python test_backend.py
-
-# Tester l'API
-curl http://localhost:8000/health
-```
-
-### Test du Frontend
-
-```bash
-cd frontend
-
-# Lancer les tests
-npm test
-
-# Vérifier les types TypeScript
-npm run type-check
-```
-
-### Test End-to-End
-
-1. Démarrer le backend (port 8000)
-2. Démarrer le frontend (port 3000)
-3. Remplir le formulaire complet
-4. Vérifier que l'analyse se lance
-5. Vérifier que le dashboard affiche les résultats
+1. **Remplir le formulaire** : Sélectionner votre profil, secteur, pays, etc.
+2. **Lancer l'analyse** : Cliquer sur "Lancer l'analyse"
+3. **Consulter le dashboard** : Les 7 blocs s'affichent progressivement
+4. **Poser des questions** : Utiliser le chatbot (💬) pour explorer les résultats
 
 ---
 
 ## 📁 Structure du Projet
 
 ```
-Africa-Strategy/
-├── backend/                      # Backend FastAPI
+africa-strategy-platform/
+├── backend/
 │   ├── app/
-│   │   ├── api/
-│   │   │   └── v1/
-│   │   │       └── endpoints/    # Endpoints API
-│   │   ├── core/
-│   │   │   ├── config.py        # Configuration
-│   │   │   └── database.py      # Base de données
-│   │   ├── models/              # Modèles SQLAlchemy
+│   │   ├── config/
+│   │   │   └── prompts/          # Prompts des 7 assistants
 │   │   ├── services/
-│   │   │   ├── openai_assistant_service.py  # Service OpenAI
-│   │   │   └── rag_service.py                # Service RAG (optionnel)
-│   │   └── main_simple.py       # Point d'entrée FastAPI
-│   ├── requirements.txt         # Dépendances Python
-│   └── test_backend.py          # Tests backend
-│
-├── frontend/                     # Frontend Next.js
+│   │   │   └── openai_assistant_service.py
+│   │   └── main_simple.py        # API principale
+│   ├── requirements.txt
+│   └── venv/
+├── frontend/
 │   ├── components/
-│   │   └── ui/                  # Composants UI
-│   ├── lib/
-│   │   └── utils.ts             # Utilitaires
+│   │   └── Chatbot.tsx
+│   ├── config/                   # Configs (secteurs, pays, ODD)
 │   ├── pages/
-│   │   ├── index.tsx            # Page questionnaire
-│   │   ├── dashboard.tsx        # Page dashboard
-│   │   └── _app.tsx             # App Next.js
-│   ├── styles/
-│   │   └── globals.css          # Styles globaux
-│   ├── package.json             # Dépendances Node
-│   └── tailwind.config.js       # Config Tailwind
-│
-├── data/                         # Données pour RAG (optionnel)
-│   └── ...                      # Documents à indexer
-│
-├── docs/                         # Documentation
-│   ├── ARCHITECTURE.md          # Architecture détaillée
-│   ├── ASSISTANT_IA_SPECIFICATIONS.md  # Spécifications IA
-│   └── TYPES_ANALYSES_DASHBOARD.md    # Types d'analyses
-│
-├── scripts/                      # Scripts utilitaires
-│   ├── test_questionnaire.py    # Test questionnaire
-│   └── test_system.py           # Test système
-│
-├── .env                          # Variables d'environnement (à créer)
-├── .gitignore                    # Fichiers ignorés par Git
-└── README.md                     # Ce fichier
+│   │   ├── index.tsx             # Formulaire
+│   │   └── dashboard.tsx         # Dashboard
+│   └── package.json
+├── start_backend.bat
+├── start_frontend.bat
+└── README.md
 ```
 
 ---
 
-## 📚 Documentation Technique
+## 🔧 Configuration avancée
 
-### Documentation Disponible
+### Changer le modèle du chatbot
 
-- **`docs/ARCHITECTURE.md`** : Architecture détaillée du système
-- **`docs/ASSISTANT_IA_SPECIFICATIONS.md`** : Spécifications complètes de l'assistant IA
-- **`docs/TYPES_ANALYSES_DASHBOARD.md`** : Types d'analyses et structure des données
-
-### API Endpoints
-
-#### POST `/api/analyze`
-Analyse complète d'une entreprise via OpenAI Assistant.
-
-**Request Body:**
-```json
-{
-  "secteur": "Agriculture",
-  "zoneGeographique": "Afrique de l'Ouest",
-  "profilOrganisation": "Entreprise privée",
-  "paysInstallation": "Sénégal",
-  "objectifsDD": ["ODD 1 : Pas de pauvreté"],
-  "positionnementStrategique": "...",
-  "visionOrganisation": "...",
-  "missionOrganisation": "...",
-  "projetsSignificatifs": "..."
-}
+Dans `backend/app/main_simple.py`, modifier la ligne :
+```python
+model="gpt-4o"  # ou "gpt-4o-mini" pour moins cher
 ```
 
-**Response:**
-```json
-{
-  "analyses": {
-    "pestel": { ... },
-    "esg": { ... },
-    "market": { ... },
-    "risk": { ... },
-    "synthesis": { ... }
-  },
-  "pipeline_analytique": { ... },
-  "metadata": { ... }
-}
-```
+### Ajouter des secteurs/pays
 
-#### GET `/health`
-Health check du serveur.
+Modifier les fichiers dans `frontend/config/` :
+- `secteurs.ts` : Liste des secteurs d'activité
+- `pays.ts` : Liste des pays africains
+- `profils.ts` : Types de profils utilisateurs
+- `odds.ts` : Objectifs de Développement Durable
 
 ---
 
-## 🔧 Développement
+## 💰 Coûts estimés (OpenAI)
 
-### Comment Nous Avons Créé le Projet
+| Action | Coût approximatif |
+|--------|-------------------|
+| 1 analyse complète (7 blocs) | ~$0.50 - $1.00 |
+| 1 question chatbot | ~$0.01 - $0.02 |
 
-1. **Backend FastAPI** : Création d'une API REST simple avec un seul endpoint `/api/analyze`
-2. **Intégration OpenAI Assistant** : Utilisation de l'API Assistants pour générer des analyses complètes
-3. **Frontend Next.js** : Création d'un formulaire multi-étapes et d'un dashboard interactif
-4. **Visualisation** : Intégration de Chart.js pour les graphiques
-5. **Design** : Style minimaliste avec inline styles pour garantir le rendu
-
-### Améliorations Futures
-
-- [ ] Ajout de l'authentification utilisateur
-- [ ] Sauvegarde des analyses en base de données
-- [ ] Export PDF des analyses
-- [ ] Comparaison d'analyses multiples
-- [ ] Intégration RAG complète avec Pinecone
-- [ ] Mode hors ligne
+*Les coûts dépendent de la longueur des réponses et du modèle utilisé.*
 
 ---
 
 ## 🐛 Dépannage
 
-### Problèmes Courants
+### Le backend ne démarre pas
+```bash
+# Vérifier que l'environnement est activé
+.\venv\Scripts\activate
+# Réinstaller les dépendances
+pip install -r requirements.txt
+```
 
-#### Backend ne démarre pas
-- Vérifier que Python 3.8+ est installé
-- Vérifier que les dépendances sont installées : `pip install -r requirements.txt`
-- Vérifier que le fichier `.env` existe avec `OPENAI_API_KEY`
+### Erreur "OPENAI_API_KEY not found"
+- Vérifier que le fichier `.env` existe dans `backend/`
+- Vérifier que la clé commence par `sk-`
 
-#### Frontend ne démarre pas
-- Vérifier que Node.js 18+ est installé
-- Installer les dépendances : `npm install`
-- Vérifier que le port 3000 n'est pas utilisé
-
-#### L'analyse ne se lance pas
-- Vérifier que le backend est démarré sur le port 8000
-- Vérifier la clé API OpenAI dans `.env`
-- Vérifier les logs du backend pour les erreurs
-
-#### Le dashboard est vide
-- Vérifier que l'analyse s'est bien terminée
-- Vérifier la console du navigateur pour les erreurs
-- Vérifier que `sessionStorage` contient `analysisResult`
+### Le frontend affiche une erreur CORS
+- Vérifier que le backend tourne sur le port 8000
+- Redémarrer le backend
 
 ---
 
-## 📝 Licence
+## 📄 Licence
 
-Développé par Ousmane Dicko
-
----
-
-## 🤝 Contribution
-
-Les contributions sont les bienvenues ! Pour contribuer :
-
-1. Fork le projet
-2. Créer une branche (`git checkout -b feature/AmazingFeature`)
-3. Commit les changements (`git commit -m 'Add some AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrir une Pull Request
+MIT License - Libre d'utilisation et de modification.
 
 ---
 
-## 📞 Support
+## 👥 Contributeurs
 
-Pour toute question ou problème :
-- Consulter la documentation dans `docs/`
-- Vérifier les logs du serveur backend
-- Ouvrir une issue sur GitHub
-
----
-
-**Version 1.0** - Décembre 2025
+- Développé par l'équipe Africa Strategy
