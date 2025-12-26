@@ -40,34 +40,62 @@ git clone https://github.com/BigOD2307/africa-strategy-platform.git
 cd africa-strategy-platform
 ```
 
-### 2. Configurer le Backend
+### 2. Installation Automatique (Recommandé - Windows)
 
+**Pour le Backend :**
 ```bash
-# Aller dans le dossier backend
+# Double-cliquer sur install_backend.bat
+# OU exécuter dans le terminal :
+install_backend.bat
+```
+
+Ce script va automatiquement :
+- ✅ Vérifier que Python est installé
+- ✅ Créer l'environnement virtuel
+- ✅ Installer toutes les dépendances
+- ✅ Vérifier la configuration
+
+**Pour le Frontend :**
+```bash
+# Double-cliquer sur install_frontend.bat
+# OU exécuter dans le terminal :
+install_frontend.bat
+```
+
+Ce script va automatiquement :
+- ✅ Vérifier que Node.js est installé
+- ✅ Installer toutes les dépendances npm
+
+### 3. Installation Manuelle (Alternative)
+
+**Backend :**
+```bash
 cd backend
-
-# Créer un environnement virtuel
 python -m venv venv
-
-# Activer l'environnement (Windows)
-.\venv\Scripts\activate
-
-# Activer l'environnement (Mac/Linux)
-source venv/bin/activate
-
-# Installer les dépendances
+.\venv\Scripts\activate  # Windows
+# source venv/bin/activate  # Mac/Linux
 pip install -r requirements.txt
 ```
 
-### 3. Configurer les variables d'environnement
+**Frontend :**
+```bash
+cd frontend
+npm install
+```
 
-Créer un fichier `.env` dans le dossier `backend/` :
+### 4. Configurer les variables d'environnement
+
+**Créer un fichier `.env` dans le dossier `backend/` :**
+
+Vous pouvez copier `backend/env.example` et le renommer en `.env`, puis modifier :
 
 ```env
 OPENAI_API_KEY=sk-votre-cle-openai-ici
 ```
 
-### 4. Créer les Assistants OpenAI
+⚠️ **Important** : Obtenez votre clé API sur [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+### 5. Créer les Assistants OpenAI
 
 Vous devez créer 7 assistants sur [platform.openai.com](https://platform.openai.com/assistants) :
 
@@ -95,21 +123,19 @@ ASSISTANT_IDS = {
 
 ⚠️ **Important** : Remplacez chaque `asst_votre_id_blocX` par le vrai ID de votre assistant créé sur OpenAI (format: `asst_xxxxx`).
 
-### 5. Configurer le Frontend
-
-```bash
-# Revenir à la racine et aller dans frontend
-cd ../frontend
-
-# Installer les dépendances
-npm install
-```
-
 ---
 
 ## ▶️ Lancement
 
-### Option 1 : Lancement manuel
+### Option 1 : Scripts Automatiques (Recommandé - Windows)
+
+**Double-cliquer sur :**
+- `start_backend.bat` pour démarrer le backend (http://localhost:8000)
+- `start_frontend.bat` pour démarrer le frontend (http://localhost:3000)
+
+⚠️ **Important** : Ouvrir deux terminaux séparés, un pour chaque script.
+
+### Option 2 : Lancement manuel
 
 **Terminal 1 - Backend :**
 ```bash
@@ -124,12 +150,6 @@ python -m uvicorn app.main_simple:app --reload --port 8000
 cd frontend
 npm run dev
 ```
-
-### Option 2 : Utiliser les scripts (Windows)
-
-Double-cliquer sur :
-- `start_backend.bat` pour lancer le backend
-- `start_frontend.bat` pour lancer le frontend
 
 ---
 
@@ -209,6 +229,25 @@ Modifier les fichiers dans `frontend/config/` :
 ---
 
 ## 🐛 Dépannage
+
+### Erreur "The v1 Assistants API has been deprecated"
+
+Si vous voyez cette erreur :
+```
+Error code: 400 - {'error': {'message': "The v1 Assistants API has been deprecated..."}}
+```
+
+✅ **Solution** : Cette erreur est maintenant corrigée ! Le code utilise automatiquement l'API v2.
+
+**Si le problème persiste :**
+1. Vérifiez que vous avez la dernière version du code (pull depuis GitHub)
+2. Réinstallez les dépendances :
+   ```bash
+   cd backend
+   .\venv\Scripts\activate
+   pip install --upgrade openai
+   pip install -r requirements.txt
+   ```
 
 ### Le backend ne démarre pas
 ```bash

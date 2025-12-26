@@ -20,7 +20,7 @@ langchain==0.1.5
 langchain-openai==0.0.5
 langchain-community==0.0.13
 pinecone-client==3.0.0
-openai==1.6.1
+openai>=1.12.0  # Version minimale pour support API v2 Assistants
 chromadb==0.4.18
 sentence-transformers==2.2.2
 faiss-cpu==1.7.4
@@ -34,7 +34,6 @@ python-dateutil==2.8.2
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
-httpx==0.25.2
 
 # Development
 black==23.11.0

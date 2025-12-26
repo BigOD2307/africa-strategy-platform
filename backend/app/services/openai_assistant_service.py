@@ -79,11 +79,15 @@ class OpenAIAssistantService:
             self.client = None
         else:
             import httpx
+            # Configuration pour utiliser l'API v2 des Assistants
             self.client = OpenAI(
                 api_key=self.api_key,
-                timeout=httpx.Timeout(900.0, connect=30.0)
+                timeout=httpx.Timeout(900.0, connect=30.0),
+                default_headers={
+                    "OpenAI-Beta": "assistants=v2"
+                }
             )
-            logger.info("✅ OpenAI Assistant Service V2 initialized")
+            logger.info("✅ OpenAI Assistant Service V2 initialized (API v2)")
             logger.info(f"   Assistants configurés: {list(self.assistant_ids.keys())}")
 
     # ═══════════════════════════════════════════════════════════════════════════
