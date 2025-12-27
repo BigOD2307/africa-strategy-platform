@@ -18,7 +18,7 @@ jinja2==3.1.2
 # AI & RAG Dependencies
 langchain==0.1.5
 langchain-openai==0.0.5
-langchain-community==0.0.13
+langchain-community==0.0.17
 pinecone-client==3.0.0
 openai>=1.12.0  # Version minimale pour support API v2 Assistants
 chromadb==0.4.18
